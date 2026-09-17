@@ -1,0 +1,77 @@
+name: price recorder
+
+on:
+  schedule:
+    # Every five minutes. GitHub queues rather than guarantees this; the recorder
+    # buckets by wall-clock time and dedupes, so a late run self-corrects.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never cancel an in-flight run: a cancelled run could leave an unpushed reading.
+  group: price-recorder
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fix the constituent set (first run only)
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+        run: |
+          if [ ! -f data/constituents.json ]; then
+            echo "No constituent set yet — discovering."
+            python discover.py
+          else
+            echo "Constituent set already fixed; leaving it untouched."
+          fi
+
+      - name: Record
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+        run: python record.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+
+          if [ -z "$(git status --porcelain data)" ]; then
+            echo "Nothing new to commit."
+            exit 0
+          fi
+
+          git add data
+          git commit -m "record: $(date -u +%Y-%m-%dT%H:%MZ)"
+
+          # A concurrent or late run may have pushed since checkout. Rebase and
+          # retry rather than forcing, so no reading is ever overwritten.
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "pushed on attempt $i"
+              exit 0
+            fi
+            echo "push rejected, rebasing (attempt $i)"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+
+          echo "Could not push after 5 attempts." >&2
+          exit 1
