@@ -64,33 +64,28 @@ def candidates():
     yield ("NVDAx", NVDAX)
 
 
-def call(path, params):
-    status, body = okx_dex.request(path, params)
+def call(name, params):
+    """v6 first, every attempt preserved on failure — see okx_dex.endpoint."""
+    status, body, _ = okx_dex.endpoint(name, params)
     ok = isinstance(body, dict) and body.get("code") in ("0", 0) and body.get("data")
     return ok, status, body
 
 
 def approve_spender(token):
     """The address an ERC-20 allowance must be granted to."""
-    for path in ("/api/v5/dex/aggregator/approve-transaction",
-                 "/api/v6/dex/aggregator/approve-transaction"):
-        params = {"chainId": okx_dex.X_LAYER, "tokenContractAddress": token,
-                  "approveAmount": str(int(AMOUNT_USD * 10 ** USDC_DECIMALS))}
-        if "v6" in path:
-            params["chainIndex"] = params.pop("chainId")
-        ok, status, body = call(path, params)
-        if ok:
-            d = body["data"][0] if isinstance(body["data"], list) else body["data"]
-            return {"endpoint": path, "spender": d.get("dexContractAddress"), "raw": d}
-        last = {"endpoint": path, "httpStatus": status, "error": body}
-    return last
+    ok, status, body = call("approve-transaction", {
+        "tokenContractAddress": token,
+        "approveAmount": str(int(AMOUNT_USD * 10 ** USDC_DECIMALS)),
+    })
+    if ok:
+        d = body["data"][0] if isinstance(body["data"], list) else body["data"]
+        return {"spender": d.get("dexContractAddress"), "raw": d}
+    return {"spender": None, "httpStatus": status, "error": body}
 
 
 def swap(token, receiver=None):
-    amount = str(int(AMOUNT_USD * 10 ** USDC_DECIMALS))
     params = {
-        "chainId": okx_dex.X_LAYER,
-        "amount": amount,
+        "amount": str(int(AMOUNT_USD * 10 ** USDC_DECIMALS)),
         "fromTokenAddress": USDC,
         "toTokenAddress": token,
         "slippage": SLIPPAGE,
@@ -98,12 +93,7 @@ def swap(token, receiver=None):
     }
     if receiver:
         params["swapReceiverAddress"] = receiver
-    ok, status, body = call("/api/v5/dex/aggregator/swap", params)
-    if not ok:
-        p6 = dict(params)
-        p6["chainIndex"] = p6.pop("chainId")
-        ok, status, body = call("/api/v6/dex/aggregator/swap", p6)
-    return ok, status, body
+    return call("swap", params)
 
 
 def summarise(body):
