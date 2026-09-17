@@ -11,8 +11,9 @@ permissions:
   contents: write
 
 concurrency:
-  # Never cancel an in-flight run: a cancelled run could leave an unpushed reading.
-  group: price-recorder
+  # Shared with the discovery workflow: both write data/ and push, so serialising
+  # them avoids a push race. Never cancel — a cancelled run loses an unpushed reading.
+  group: vectra-data
   cancel-in-progress: false
 
 jobs:
@@ -26,18 +27,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Fix the constituent set (first run only)
-        env:
-          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
-          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
-          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
-          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+      - name: Require a fixed constituent set
         run: |
           if [ ! -f data/constituents.json ]; then
-            echo "No constituent set yet — discovering."
-            python discover.py
-          else
-            echo "Constituent set already fixed; leaving it untouched."
+            echo "No data/constituents.json — run the 'discover constituents'" >&2
+            echo "workflow first. The recorder never picks its own basket." >&2
+            exit 1
           fi
 
       - name: Record

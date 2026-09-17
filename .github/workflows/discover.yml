@@ -1,0 +1,71 @@
+name: discover constituents
+
+# Manual only. X Layer lists hundreds of xStocks and each is probed with a live
+# $5 quote, so this is long and resumable — re-run until it reports nothing left.
+on:
+  workflow_dispatch:
+    inputs:
+      max_probe:
+        description: "Max tokens to probe this run (0 = no limit)"
+        required: false
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vectra-data
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Probe
+        id: probe
+        # Step-level timeout with continue-on-error, so a cut-off probe still
+        # reaches the commit step below and its cached work is preserved.
+        timeout-minutes: 45
+        continue-on-error: true
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          VECTRA_MAX_PROBE: ${{ inputs.max_probe }}
+        run: python discover.py
+
+      - name: Commit whatever was learned
+        if: always()
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+
+          if [ -z "$(git status --porcelain data)" ]; then
+            echo "Nothing new."
+            exit 0
+          fi
+
+          git add data
+          git commit -m "discover: probe progress $(date -u +%Y-%m-%dT%H:%MZ)"
+
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+          echo "Could not push after 5 attempts." >&2
+          exit 1
+
+      - name: Report probe outcome
+        if: steps.probe.outcome != 'success'
+        run: |
+          echo "Probe did not finish cleanly (outcome: ${{ steps.probe.outcome }})."
+          echo "Cached progress was committed. Re-run this workflow to continue."
