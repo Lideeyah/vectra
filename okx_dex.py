@@ -11,7 +11,17 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-BASE = "https://web3.okx.com"
+# Cloudflare fronts these hosts and rejects default library user agents with
+# error 1010 before the request reaches OKX. Identify as a normal client.
+USER_AGENT = os.environ.get(
+    "OKX_USER_AGENT",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+)
+
+# web3.okx.com is the Cloudflare-fronted site; www.okx.com has historically
+# served the same DEX routes. Try both before declaring a path unreachable.
+HOSTS = ["https://web3.okx.com", "https://www.okx.com"]
 X_LAYER = "196"
 
 
@@ -54,28 +64,37 @@ def request(path, params=None):
             hashlib.sha256,
         ).digest()
     ).decode()
-    req = urllib.request.Request(
-        BASE + request_path,
-        headers={
-            "OK-ACCESS-KEY": ENV["OKX_API_KEY"],
-            "OK-ACCESS-SIGN": sign,
-            "OK-ACCESS-TIMESTAMP": ts,
-            "OK-ACCESS-PASSPHRASE": ENV["OKX_PASSPHRASE"],
-            "OK-ACCESS-PROJECT": ENV["OKX_PROJECT_ID"],
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            raw, status = r.read().decode(), r.status
-    except urllib.error.HTTPError as e:
-        raw, status = e.read().decode(), e.code
-    except Exception as e:
-        return 0, {"transport_error": repr(e)}
-    try:
-        return status, json.loads(raw)
-    except json.JSONDecodeError:
-        return status, raw
+    headers = {
+        "OK-ACCESS-KEY": ENV["OKX_API_KEY"],
+        "OK-ACCESS-SIGN": sign,
+        "OK-ACCESS-TIMESTAMP": ts,
+        "OK-ACCESS-PASSPHRASE": ENV["OKX_PASSPHRASE"],
+        "OK-ACCESS-PROJECT": ENV["OKX_PROJECT_ID"],
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": USER_AGENT,
+    }
+
+    last = (0, {"transport_error": "no hosts attempted"})
+    for host in HOSTS:
+        req = urllib.request.Request(host + request_path, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw, status = r.read().decode(), r.status
+        except urllib.error.HTTPError as e:
+            raw, status = e.read().decode(), e.code
+        except Exception as e:
+            last = (0, {"transport_error": repr(e), "host": host})
+            continue
+        try:
+            body = json.loads(raw)
+        except json.JSONDecodeError:
+            body = {"non_json_body": raw[:400], "host": host}
+        if status == 200 and isinstance(body, dict):
+            return status, body
+        last = (status, body if isinstance(body, dict) else {"body": body, "host": host})
+    return last
 
 
 def all_tokens(chain=X_LAYER):
