@@ -35,11 +35,17 @@ MAX_PROBE = int(os.environ.get("VECTRA_MAX_PROBE", "0"))  # 0 = no limit
 # while DELLx quoted), which points at throttling rather than market depth.
 THROTTLE_S = float(os.environ.get("VECTRA_THROTTLE", "3.0"))
 FLUSH_EVERY = 10
+# Bump when a probe result becomes untrustworthy; forces a full re-probe.
+PROBE_VERSION = 2
 
 # Codes and signals that mean "we were refused", not "this token has no route".
 RATE_LIMIT_CODES = {"50011", "50013", "50061", "429"}
 RATE_LIMIT_HINTS = ("too many requests", "rate limit", "requests too frequent",
                     "system busy", "try again")
+# Faults on our side of the call, never facts about the token.
+# 50050 is the v5 deprecation notice that produced 594 false "no route" results.
+CLIENT_ERROR_CODES = {"50050", "50000", "50001", "50100", "50110", "50111",
+                      "50112", "50113", "50114"}
 
 UNIVERSE = Path("data/xstocks_all.json")
 PROBE = Path("data/liquidity_probe.json")
@@ -116,8 +122,14 @@ def phase_probe(usdc, stocks):
         key = (t.get("tokenContractAddress") or "").lower()
         if key not in cache:
             return True
+        e = cache[key]
+        # Results from an earlier probe version were produced against the
+        # deprecated v5 endpoint with the v6 error masked. They are not
+        # evidence and are discarded rather than trusted.
+        if e.get("probeVersion") != PROBE_VERSION:
+            return True
         # Unknowns are refusals, not results. Always retry them.
-        return cache[key].get("outcome") == "unknown"
+        return e.get("outcome") == "unknown"
 
     todo = [t for t in stocks if needs_probe(t)]
     if MAX_PROBE:
@@ -139,6 +151,7 @@ def phase_probe(usdc, stocks):
             key = addr.lower()
             entry = {"symbol": t.get("tokenSymbol"), "name": t.get("tokenName"),
                      "address": addr, "decimals": decimals_of(t),
+                     "probeVersion": PROBE_VERSION,
                      "probedAt": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
             status, body = okx_dex.quote(usdc["tokenContractAddress"], addr, amount)
@@ -154,7 +167,8 @@ def phase_probe(usdc, stocks):
                     impact = None
                 entry.update({"quotable": out_units > 0, "priceImpactPct": impact,
                               "amountOutUnits": str(out_units),
-                              "routes": okx_dex.routes_of(d)})
+                              "routes": okx_dex.routes_of(d),
+                              "rawKeys": sorted(d.keys())})
                 entry["outcome"] = "quotable" if out_units > 0 else "no_route"
             else:
                 msg = str(body.get("msg") if isinstance(body, dict) else body)[:160]
@@ -162,9 +176,11 @@ def phase_probe(usdc, stocks):
                 refused = (
                     status in (429, 0)
                     or code in RATE_LIMIT_CODES
+                    or code in CLIENT_ERROR_CODES
                     or any(h in msg.lower() for h in RATE_LIMIT_HINTS)
                     or (isinstance(body, dict) and "transport_error" in body)
                 )
+                entry["attempts"] = body.get("attempts") if isinstance(body, dict) else None
                 # A refusal is not a fact about the token. It is recorded as
                 # unknown, kept out of the liquidity columns entirely, and
                 # retried on the next run.

@@ -97,48 +97,86 @@ def request(path, params=None):
     return last
 
 
-def all_tokens(chain=X_LAYER):
-    """Token list for a chain. Tries v5 and v6 param spellings."""
-    attempts = [
-        ("/api/v5/dex/aggregator/all-tokens", {"chainId": chain}),
-        ("/api/v6/dex/aggregator/all-tokens", {"chainIndex": chain}),
+# v5 returns code 50050 ("V5 API is being deprecated") for most calls on this
+# chain, so v6 is primary. v5 is kept only as a last resort.
+VERSIONS = [
+    ("/api/v6/dex/aggregator/{}", "chainIndex"),
+    ("/api/v5/dex/aggregator/{}", "chainId"),
+]
+
+
+def _ok(body):
+    return isinstance(body, dict) and body.get("code") in ("0", 0) and body.get("data")
+
+
+def endpoint(name, params, chain=X_LAYER):
+    """Call an aggregator endpoint across API versions.
+
+    On total failure the returned body carries EVERY attempt. An earlier
+    version's error must never stand in for a later one's — that masking is
+    what made a deprecation notice look like 594 illiquid tokens.
+    """
+    attempts = []
+    for template, chain_key in VERSIONS:
+        path = template.format(name)
+        p = dict(params)
+        p[chain_key] = chain
+        status, body = request(path, p)
+        attempts.append((path, status, body))
+        if _ok(body):
+            return status, body, attempts
+    last_status, last_body = attempts[-1][1], attempts[-1][2]
+    merged = dict(last_body) if isinstance(last_body, dict) else {"body": last_body}
+    merged["attempts"] = [
+        {"path": p, "status": s,
+         "code": b.get("code") if isinstance(b, dict) else None,
+         "msg": (b.get("msg") if isinstance(b, dict) else str(b))[:200]}
+        for p, s, b in attempts
     ]
-    out = []
-    for path, params in attempts:
-        status, body = request(path, params)
-        out.append((path, status, body))
-        if isinstance(body, dict) and body.get("code") == "0" and body.get("data"):
-            return body["data"], out
-    return None, out
+    return last_status, merged, attempts
+
+
+def all_tokens(chain=X_LAYER):
+    status, body, attempts = endpoint("all-tokens", {}, chain)
+    if _ok(body):
+        return body["data"], attempts
+    return None, attempts
 
 
 def quote(from_addr, to_addr, amount_base_units, chain=X_LAYER, slippage="0.01"):
     """Single aggregator quote. amount is in the from-token's smallest units."""
-    params = {
-        "chainId": chain,
+    status, body, _ = endpoint("quote", {
         "amount": str(amount_base_units),
         "fromTokenAddress": from_addr,
         "toTokenAddress": to_addr,
         "slippage": slippage,
-    }
-    status, body = request("/api/v5/dex/aggregator/quote", params)
-    if isinstance(body, dict) and body.get("code") not in ("0", 0):
-        p6 = dict(params)
-        p6["chainIndex"] = p6.pop("chainId")
-        s6, b6 = request("/api/v6/dex/aggregator/quote", p6)
-        if isinstance(b6, dict) and b6.get("code") in ("0", 0):
-            return s6, b6
+    }, chain)
     return status, body
 
 
 def routes_of(data):
-    """Flatten the DEX/liquidity sources used by a quote into 'Name pct%' strings."""
-    sources = []
-    for router in data.get("dexRouterList") or []:
-        for sub in router.get("subRouterList") or []:
-            for proto in sub.get("dexProtocol") or []:
-                sources.append(f"{proto.get('dexName')} {proto.get('percent')}%")
-    if not sources:
-        for proto in data.get("quoteCompareList") or []:
-            sources.append(proto.get("dexName", "?"))
+    """Flatten the liquidity sources a quote used.
+
+    Shape-agnostic on purpose: v5 and v6 nest this differently, and reading v5
+    field names against a v6 body silently produced an empty route list. Walk
+    the structure and collect anything that names a DEX, wherever it sits.
+    """
+    sources, seen = [], set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            name = node.get("dexName") or node.get("dexProtocolName") or node.get("name")
+            if name and isinstance(name, str):
+                pct = node.get("percent") or node.get("routerPercent")
+                label = f"{name} {pct}%" if pct else name
+                if label not in seen:
+                    seen.add(label)
+                    sources.append(label)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(data)
     return sources
