@@ -1,5 +1,5 @@
 {
-  "fixedAt": "2026-09-17T10:56:53+00:00",
+  "fixedAt": "2026-09-17T11:56:25+00:00",
   "chain": "196",
   "probeNotionalUsd": 5.0,
   "selectionBasis": "lowest observed price impact on a live $5 USDC quote; NVDAx pinned",
@@ -21,6 +21,54 @@
       "multiplierAtFix": 1.001701196801074
     },
     {
+      "symbol": "MSTRx",
+      "name": "MicroStrategy xStock",
+      "address": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0
+    },
+    {
+      "symbol": "SPYx",
+      "name": "SP500 xStock",
+      "address": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.005714560286254
+    },
+    {
+      "symbol": "QQQx",
+      "name": "Nasdaq xStock",
+      "address": "0xa753a7395cae905cd615da0b82a53e0560f250af",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0027250296551051
+    },
+    {
+      "symbol": "GOOGLx",
+      "name": "Alphabet xStock",
+      "address": "0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0023772500603487
+    },
+    {
+      "symbol": "BRK.Bx",
+      "name": "Berkshire Hathaway xStock",
+      "address": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0
+    },
+    {
+      "symbol": "TSLAx",
+      "name": "Tesla xStock",
+      "address": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0
+    },
+    {
       "symbol": "AAPLx",
       "name": "Apple xStock",
       "address": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
@@ -29,17 +77,41 @@
       "multiplierAtFix": 1.0032690125398187
     },
     {
-      "symbol": "AMDx",
-      "name": "AMD xStock",
-      "address": "0x3522513e5f146a2006e2901b05f16b2821485e19",
+      "symbol": "COINx",
+      "name": "Coinbase xStock",
+      "address": "0x364f210f430ec2448fc68a49203040f6124096f0",
       "decimals": 18,
       "priceImpactPctAtProbe": null,
       "multiplierAtFix": 1.0
     },
     {
-      "symbol": "AMZNx",
-      "name": "Amazon.com xStock",
-      "address": "0x3557ba345b01efa20a1bddc61f573bfd87195081",
+      "symbol": "TSMx",
+      "name": "TSMC xStock",
+      "address": "0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0061874479320332
+    },
+    {
+      "symbol": "AVGOx",
+      "name": "Broadcom xStock",
+      "address": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.0048837684862768
+    },
+    {
+      "symbol": "IWMx",
+      "name": "Russell 2000 xStock",
+      "address": "0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+      "decimals": 18,
+      "priceImpactPctAtProbe": null,
+      "multiplierAtFix": 1.004730320498842
+    },
+    {
+      "symbol": "HOODx",
+      "name": "Robinhood xStock",
+      "address": "0xe1385fdd5ffb10081cd52c56584f25efa9084015",
       "decimals": 18,
       "priceImpactPctAtProbe": null,
       "multiplierAtFix": 1.0
@@ -51,78 +123,6 @@
       "decimals": 18,
       "priceImpactPctAtProbe": null,
       "multiplierAtFix": 1.0028663344146624
-    },
-    {
-      "symbol": "AVGOx",
-      "name": "Broadcom xStock",
-      "address": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0048837684862768
-    },
-    {
-      "symbol": "BMNRx",
-      "name": "Bitmine xStock",
-      "address": "0xaeb681b69e5094e04d11bcef51a71358a374c3ed",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0
-    },
-    {
-      "symbol": "BRK.Bx",
-      "name": "Berkshire Hathaway xStock",
-      "address": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0
-    },
-    {
-      "symbol": "COINx",
-      "name": "Coinbase xStock",
-      "address": "0x364f210f430ec2448fc68a49203040f6124096f0",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0
-    },
-    {
-      "symbol": "CRCLx",
-      "name": "Circle xStock",
-      "address": "0xfebded1b0986a8ee107f5ab1a1c5a813491deceb",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0
-    },
-    {
-      "symbol": "CRWVx",
-      "name": "CoreWeave xStock",
-      "address": "0x16314d1032e6476c9451d1f02ba365a249ff36c7",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0
-    },
-    {
-      "symbol": "DELLx",
-      "name": "Dell Technologies Inc. xStock",
-      "address": "0x2782df1cc877f720c81b4f6568db64563f1d3aa3",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0033165309725203
-    },
-    {
-      "symbol": "GEVx",
-      "name": "GE Vernova Inc. xStock",
-      "address": "0x5fb4184f8b515b1c54d1bac839dcf81276d6b73e",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.0003574821
-    },
-    {
-      "symbol": "GMEx",
-      "name": "Gamestop xStock",
-      "address": "0xe5f6d3b2405abdfe6f660e63202b25d23763160d",
-      "decimals": 18,
-      "priceImpactPctAtProbe": null,
-      "multiplierAtFix": 1.005309167384
     }
   ]
 }
