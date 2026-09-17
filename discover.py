@@ -27,6 +27,8 @@ import xlayer
 USDC = "0xb6ceceab302e2e4948951ee7843fc24e92933061"
 NVDAX = "0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
 PROBE_USD = 5.0
+DEPTH_SMALL_USD = 1.0
+DEPTH_LARGE_USD = 50.0
 TARGET_SET = int(os.environ.get("VECTRA_SET_SIZE", "14"))
 MAX_PROBE = int(os.environ.get("VECTRA_MAX_PROBE", "0"))  # 0 = no limit
 THROTTLE_S = float(os.environ.get("VECTRA_THROTTLE", "1.1"))
@@ -35,6 +37,7 @@ FLUSH_EVERY = 10
 UNIVERSE = Path("data/xstocks_all.json")
 PROBE = Path("data/liquidity_probe.json")
 OUT = Path("data/constituents.json")
+RANKING = Path("data/ranking.md")
 
 
 def is_xstock(t):
@@ -165,10 +168,82 @@ def phase_probe(usdc, stocks):
     return cache, remaining
 
 
+def phase_depth(usdc, cache):
+    """Measure real slippage on the quotable set.
+
+    The aggregator returns priceImpactPercentage as null on this chain, so
+    ranking by it is meaningless. Depth is measured instead: quote the same
+    token small and large, and read how far the rate degrades. That is the
+    quantity the spec actually cares about, observed rather than self-reported.
+    """
+    quotable = [e for e in cache.values() if e.get("quotable")]
+    if not quotable:
+        return
+
+    dec_in = decimals_of(usdc, 6)
+    small = int(round(DEPTH_SMALL_USD * 10 ** dec_in))
+    large = int(round(DEPTH_LARGE_USD * 10 ** dec_in))
+    todo = [e for e in quotable if "depthPct" not in e]
+    print(f"\ndepth: measuring {len(todo)} quotable tokens at "
+          f"${DEPTH_SMALL_USD:g} vs ${DEPTH_LARGE_USD:g}")
+
+    def rate(addr, amount, dec_out):
+        status, body = okx_dex.quote(usdc["tokenContractAddress"], addr, amount)
+        if not (isinstance(body, dict) and body.get("code") in ("0", 0) and body.get("data")):
+            return None
+        d = body["data"][0] if isinstance(body["data"], list) else body["data"]
+        try:
+            out = int(d.get("toTokenAmount") or 0)
+        except (TypeError, ValueError):
+            return None
+        if out <= 0:
+            return None
+        return (out / 10 ** dec_out) / (amount / 10 ** dec_in)
+
+    for i, e in enumerate(todo, 1):
+        addr, dec_out = e["address"], e["decimals"]
+        r_small = rate(addr, small, dec_out)
+        time.sleep(THROTTLE_S)
+        r_large = rate(addr, large, dec_out)
+        time.sleep(THROTTLE_S)
+        if r_small and r_large:
+            # Positive means you get proportionally less per dollar when larger.
+            e["depthPct"] = (r_small - r_large) / r_small * 100
+            e["rateSmall"], e["rateLarge"] = r_small, r_large
+        else:
+            e["depthPct"] = None
+            e["depthError"] = "one or both sizes returned no route"
+        print(f"  [{i}/{len(todo)}] {e['symbol']:<10} depth={e['depthPct']}")
+        save(PROBE, cache)
+
+
 def phase_select(usdc, cache, universe_count):
     quotable = [e for e in cache.values() if e.get("quotable")]
-    quotable.sort(key=lambda e: (e.get("priceImpactPct") is None,
-                                 e.get("priceImpactPct") or 0))
+    # Rank by measured depth where available, falling back to reported impact.
+    quotable.sort(key=lambda e: (
+        e.get("depthPct") is None and e.get("priceImpactPct") is None,
+        e.get("depthPct") if e.get("depthPct") is not None
+        else (e.get("priceImpactPct") or 0),
+    ))
+
+    lines = ["# Quotable xStocks on X Layer, ranked by measured depth", "",
+             f"Universe: {universe_count} xStocks. Probed: {len(cache)}. "
+             f"Quotable at ${PROBE_USD:g}: {len(quotable)}.", "",
+             f"Depth is the percentage the rate degrades between a "
+             f"${DEPTH_SMALL_USD:g} and a ${DEPTH_LARGE_USD:g} quote. "
+             f"Lower is deeper.", "",
+             "| # | Symbol | Depth % | Multiplier | Address |",
+             "|---|--------|---------|------------|---------|"]
+    for i, e in enumerate(quotable, 1):
+        d = e.get("depthPct")
+        lines.append(f"| {i} | {e['symbol']} | "
+                     f"{'—' if d is None else f'{d:.4f}'} | "
+                     f"{e.get('multiplier')} | `{e['address']}` |")
+    lines += ["", "This is the menu. The recording set below is a provisional "
+                  "default taken from the top of it; choose the index deliberately."]
+    RANKING.parent.mkdir(parents=True, exist_ok=True)
+    RANKING.write_text("\n".join(lines) + "\n")
+    print(f"\nfull ranking -> {RANKING}")
 
     chosen = [e for e in quotable
               if e["address"].lower() != NVDAX.lower()][:max(TARGET_SET - 1, 0)]
@@ -216,6 +291,8 @@ def main():
         print("No quotable xStock yet — not fixing a set.", file=sys.stderr)
         return 1
 
+    phase_depth(usdc, cache)
+    save(PROBE, cache)
     phase_select(usdc, cache, len(stocks))
     if remaining:
         print(f"\n{remaining} tokens still unprobed. Re-run to continue; the set "

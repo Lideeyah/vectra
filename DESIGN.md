@@ -70,6 +70,10 @@ Convergence. Values ease toward their target over roughly 600ms rather than snap
 
 Nothing bounces, pulses, springs or spins.
 
+**Indeterminate waiting is not animated at all.** Convergence applies to values that have a target to ease toward. A wait has no known destination, so it is shown as a measurement rather than a motion: elapsed seconds since submission for a leg in flight, time remaining until the next scheduled run when waiting for a first cycle. Set in mono, counting, with nothing else moving.
+
+Everything on screen is a measurement, so a wait is measured too.
+
 ---
 
 ## 7. THE MARK

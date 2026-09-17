@@ -1,0 +1,62 @@
+name: verify swap endpoint
+
+# Read-only. Requests swap payloads to learn the router address, the calldata
+# shape and whether output can be redirected. Signs nothing, sends nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      token:
+        description: "Token address to test against (blank = auto-pick a liquid one)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vectra-data
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify
+        id: verify
+        continue-on-error: true
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          VECTRA_TOKEN: ${{ inputs.token }}
+        run: python verify_swap.py
+
+      - name: Commit findings
+        if: always()
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+
+          if [ -z "$(git status --porcelain data)" ]; then
+            echo "Nothing written."
+            exit 0
+          fi
+
+          git add data
+          git commit -m "verify: swap endpoint $(date -u +%Y-%m-%dT%H:%MZ)"
+
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+          echo "Could not push after 5 attempts." >&2
+          exit 1

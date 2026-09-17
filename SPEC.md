@@ -194,6 +194,23 @@ No database. No user accounts. The wallet is the identity.
 
 Every state below must render as a distinct, legible screen. A state that falls through to a generic error is a bug.
 
+### 8.1 Precedence when states co-occur
+
+Several of these states are independently reachable at the same moment, and the design system permits one red element per screen. The red slot goes to whichever failure most affects the user's money, in this order:
+
+1. **Leg failed** — money moved and something went wrong.
+2. **Insufficient allowance** — the agent is blocked, but nothing is at risk.
+3. **Keeper stale** — nothing is happening, which is the least urgent of the three.
+4. Anything else.
+
+Everything demoted is stated plainly as text in bone at 60 percent. Demoted does not mean hidden: a user must still be able to read every condition currently true, just not in red.
+
+### 8.2 How waiting is shown
+
+Waiting is never animated. In an instrument a wait is a measurement like any other, so it is shown as elapsed or remaining time in mono, counting, with nothing else in motion.
+
+A leg in flight shows seconds elapsed since submission. Waiting for the first cycle shows time until the next scheduled run. Both are precise and honest, and both tell the user more than a spinner could.
+
 **No wallet connected.** The product explains itself and offers to connect. Nothing else is shown as though it were real.
 
 **Wrong network.** Detected and offered as a one-click switch to X Layer. The app does not silently read the wrong chain.
