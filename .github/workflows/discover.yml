@@ -9,6 +9,10 @@ on:
         description: "Max tokens to probe this run (0 = no limit)"
         required: false
         default: "0"
+      throttle:
+        description: "Seconds between requests. Raise if refusals persist."
+        required: false
+        default: "3.0"
 
 permissions:
   contents: write
@@ -40,6 +44,7 @@ jobs:
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
           OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
           VECTRA_MAX_PROBE: ${{ inputs.max_probe }}
+          VECTRA_THROTTLE: ${{ inputs.throttle }}
         run: python discover.py
 
       - name: Commit whatever was learned

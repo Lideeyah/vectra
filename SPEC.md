@@ -373,6 +373,21 @@ This is the opposite of the Solana implementation, where the raw balance stays c
 
 **Confirmed on chain.** NVDAx at `0xc845b2894dbddd03858fd2d643b4ef725fe0849d` exposes `multiplier()` returning an 18-decimal fixed-point value, read live at 1.001701196801074. `getMultiplier()`, `currentMultiplier()`, `scalingFactor()` and `totalShares()` all revert. Rebasing is live, not theoretical — the multiplier has already moved above 1.
 
+### 14.1 Reference cases, recorded live
+
+Both kinds of corporate event are already visible on X Layer. These are recorded here as of 2026-09-17 because they are demonstrable rather than described, and because a multiplier can change at any time and these readings cannot be recovered afterwards.
+
+| Token | Multiplier | What it evidences |
+|---|---|---|
+| **CRWDx** | `4.0` | A four-for-one split, already applied on chain. The clean split case. |
+| **CMCSAx** | `1.0876797409606038` | Dividend accrual of roughly 8.8% since issuance. |
+| **CVXx** | `1.0295541831890767` | Dividend accrual of roughly 3.0%. |
+| NVDAx | `1.001701196801074` | Early accrual, the baseline case. |
+
+CRWDx is the important one. A 4.0 multiplier means a holder's `balanceOf` is four times their `sharesOf`, and any system that cached a balance across that event was wrong by 300%. It turns section 14 from a description of a mechanism into something that can be pointed at.
+
+These are also the natural demo assets: a basket containing CRWDx and CMCSAx exercises both event types against real state rather than a simulated rebase.
+
 **What this makes easy.** A split does not create a false price collapse. One token continues to track one share, so on a ten for one split the token price falls to a tenth while the balance rises tenfold and the position's value is unchanged. Drift computed as balance times price remains correct through the event with no special handling. The failure mode that requires an explicit guard on Solana does not exist here.
 
 **What this makes dangerous.** Balances change without any transfer occurring. Any value cached across a cycle, stored as a number, or read at one moment and used at another can be silently wrong. So:
@@ -410,5 +425,9 @@ Recorded as they are found, so the document does not quietly diverge from what i
 **The universe is much larger than assumed.** X Layer lists hundreds of xStocks. Section 9.1's "pick from available xStocks" is not a workable interface at that scale, and "choose ten by liquidity" is no longer an obvious selection rule. This strengthens section 2A's position that baskets should be defined indices, and that decision should be taken with the liquidity probe results in hand.
 
 **OKX's edge rejects default HTTP clients.** Requests carrying a library default user agent are refused by Cloudflare with error 1010 before reaching the API. Clients must send ordinary browser headers. If this escalates to TLS fingerprinting, the correct response is to adopt OKX's own SDK rather than push further against the edge.
+
+**Depth is measured, not read from a field.** The aggregator returns `priceImpactPercentage` as null on this chain, so the original plan to rank constituents by reported price impact could not work. Depth is instead observed directly: quote the same token at one dollar and at fifty, and read how far the rate degrades between them. This is a better method than the one it replaces, not merely a workaround — it is a direct observation of what the book does under size, rather than a number the venue reports about itself, and it cannot be misreported. The same technique settled the price-unit question on Gapless.
+
+**A refusal is not a liquidity finding.** An early probe at 1.1 second spacing returned a success pattern inconsistent with real markets — TSLAx dead while DELLx quoted — which indicates throttling rather than market depth. Probe outcomes are therefore recorded in three categories that never share a column: `quotable`, `no_route` (a genuine finding about the token), and `unknown` (the API refused us: 429, a rate-limit code, or a transport error). Unknowns are retried on every subsequent run and are never counted as evidence about liquidity. Request spacing defaults to 3 seconds and is raised if refusals persist.
 
 **Scheduled runs are irregular.** GitHub's five minute cron is a floor, not a guarantee; runs are delayed or dropped under load, and schedules auto-disable after sixty days of repository inactivity. The recorder buckets and dedupes readings so jitter is absorbed, but the tracking error computation must treat the series as irregularly sampled rather than assuming 288 readings per day.

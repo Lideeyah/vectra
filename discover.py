@@ -31,8 +31,15 @@ DEPTH_SMALL_USD = 1.0
 DEPTH_LARGE_USD = 50.0
 TARGET_SET = int(os.environ.get("VECTRA_SET_SIZE", "14"))
 MAX_PROBE = int(os.environ.get("VECTRA_MAX_PROBE", "0"))  # 0 = no limit
-THROTTLE_S = float(os.environ.get("VECTRA_THROTTLE", "1.1"))
+# 1.1s produced a success pattern inconsistent with real liquidity (TSLAx dead
+# while DELLx quoted), which points at throttling rather than market depth.
+THROTTLE_S = float(os.environ.get("VECTRA_THROTTLE", "3.0"))
 FLUSH_EVERY = 10
+
+# Codes and signals that mean "we were refused", not "this token has no route".
+RATE_LIMIT_CODES = {"50011", "50013", "50061", "429"}
+RATE_LIMIT_HINTS = ("too many requests", "rate limit", "requests too frequent",
+                    "system busy", "try again")
 
 UNIVERSE = Path("data/xstocks_all.json")
 PROBE = Path("data/liquidity_probe.json")
@@ -104,13 +111,23 @@ def phase_universe():
 def phase_probe(usdc, stocks):
     """Resumable. Returns the probe cache keyed by lowercase address."""
     cache = load(PROBE, {})
-    todo = [t for t in stocks
-            if (t.get("tokenContractAddress") or "").lower() not in cache]
+
+    def needs_probe(t):
+        key = (t.get("tokenContractAddress") or "").lower()
+        if key not in cache:
+            return True
+        # Unknowns are refusals, not results. Always retry them.
+        return cache[key].get("outcome") == "unknown"
+
+    todo = [t for t in stocks if needs_probe(t)]
     if MAX_PROBE:
         todo = todo[:MAX_PROBE]
 
+    retries = sum(1 for t in todo
+                  if (t.get("tokenContractAddress") or "").lower() in cache)
     print(f"probe: {len(cache)} cached, {len(todo)} to go "
-          f"(~{len(todo) * THROTTLE_S / 60:.1f} min)")
+          f"({retries} of them retries of earlier refusals), "
+          f"~{len(todo) * THROTTLE_S / 60:.1f} min at {THROTTLE_S}s spacing")
 
     dec_in = decimals_of(usdc, 6)
     amount = int(round(PROBE_USD * 10 ** dec_in))
@@ -138,11 +155,25 @@ def phase_probe(usdc, stocks):
                 entry.update({"quotable": out_units > 0, "priceImpactPct": impact,
                               "amountOutUnits": str(out_units),
                               "routes": okx_dex.routes_of(d)})
+                entry["outcome"] = "quotable" if out_units > 0 else "no_route"
             else:
-                msg = body.get("msg") if isinstance(body, dict) else str(body)[:160]
-                code = body.get("code") if isinstance(body, dict) else "?"
-                entry.update({"quotable": False, "priceImpactPct": None,
-                              "error": f"http={status} code={code} msg={msg}"[:200]})
+                msg = str(body.get("msg") if isinstance(body, dict) else body)[:160]
+                code = str(body.get("code") if isinstance(body, dict) else "?")
+                refused = (
+                    status in (429, 0)
+                    or code in RATE_LIMIT_CODES
+                    or any(h in msg.lower() for h in RATE_LIMIT_HINTS)
+                    or (isinstance(body, dict) and "transport_error" in body)
+                )
+                # A refusal is not a fact about the token. It is recorded as
+                # unknown, kept out of the liquidity columns entirely, and
+                # retried on the next run.
+                entry.update({
+                    "quotable": False,
+                    "priceImpactPct": None,
+                    "outcome": "unknown" if refused else "no_route",
+                    "error": f"http={status} code={code} msg={msg}"[:200],
+                })
 
             mult, mult_raw = xlayer.multiplier(addr)
             entry["multiplier"] = mult
@@ -150,9 +181,11 @@ def phase_probe(usdc, stocks):
 
             cache[key] = entry
             done += 1
-            flag = "ok " if entry["quotable"] else "DEAD"
+            flag = {"quotable": "ok     ", "no_route": "NO-ROUTE",
+                    "unknown": "REFUSED"}[entry["outcome"]]
+            detail = "" if entry["outcome"] == "quotable" else f" {entry.get('error','')[:60]}"
             print(f"  [{done}/{len(todo)}] {entry['symbol']:<10} {flag} "
-                  f"impact={entry['priceImpactPct']} mult={mult}")
+                  f"mult={mult}{detail}")
 
             if done % FLUSH_EVERY == 0:
                 save(PROBE, cache)
@@ -162,9 +195,18 @@ def phase_probe(usdc, stocks):
     finally:
         save(PROBE, cache)
 
-    remaining = len([t for t in stocks
-                     if (t.get("tokenContractAddress") or "").lower() not in cache])
-    print(f"probe cache: {len(cache)} entries, {remaining} still unprobed")
+    counts = {"quotable": 0, "no_route": 0, "unknown": 0}
+    for e in cache.values():
+        counts[e.get("outcome", "unknown")] = counts.get(e.get("outcome", "unknown"), 0) + 1
+    remaining = len([t for t in stocks if needs_probe(t)])
+
+    print(f"\nprobe cache: {len(cache)} entries — "
+          f"{counts['quotable']} quotable, {counts['no_route']} no route, "
+          f"{counts['unknown']} refused (unknown)")
+    if counts["unknown"]:
+        print(f"  {counts['unknown']} refusals are NOT liquidity findings. "
+              f"Re-run to retry them; raise VECTRA_THROTTLE if they persist.")
+    print(f"  {remaining} still to probe")
     return cache, remaining
 
 
@@ -226,9 +268,18 @@ def phase_select(usdc, cache, universe_count):
         else (e.get("priceImpactPct") or 0),
     ))
 
+    counts = {"quotable": 0, "no_route": 0, "unknown": 0}
+    for e in cache.values():
+        k = e.get("outcome", "unknown")
+        counts[k] = counts.get(k, 0) + 1
+
     lines = ["# Quotable xStocks on X Layer, ranked by measured depth", "",
-             f"Universe: {universe_count} xStocks. Probed: {len(cache)}. "
-             f"Quotable at ${PROBE_USD:g}: {len(quotable)}.", "",
+             f"Universe: {universe_count} xStocks. Probed: {len(cache)}.", "",
+             f"- **{counts['quotable']}** quotable at ${PROBE_USD:g}",
+             f"- **{counts['no_route']}** returned no route (a liquidity finding)",
+             f"- **{counts['unknown']}** were refused by the API "
+             f"(rate limit or transport — **not** a liquidity finding, retried on re-run)",
+             "",
              f"Depth is the percentage the rate degrades between a "
              f"${DEPTH_SMALL_USD:g} and a ${DEPTH_LARGE_USD:g} quote. "
              f"Lower is deeper.", "",
