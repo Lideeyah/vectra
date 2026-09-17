@@ -112,7 +112,17 @@ The contract therefore bounds the **size and direction** of trades, and leaves t
 - when spending USDC, `amountIn` is at or below `maxLegUsdc`, and cumulative USDC spend after this leg is at or below `totalCapUsdc`
 - **direction**: USDC may only be spent to buy a token whose current holding is below its target share of the basket, measured in the token's own units against the last recorded target, and a basket token may only be sold when its holding is above target
 
-The direction rule is what survives the absence of prices. It does not prove the leg is optimal, and a compromised agent retains freedom to choose a suboptimal but still corrective leg. What it forecloses is the unbounded case: the agent cannot churn the position back and forth, cannot buy what is already overweight, and cannot spend beyond the cap. That is a weaker guarantee than "every action reduces distance from target", and the difference is stated here rather than glossed.
+The direction rule is what survives the absence of prices. It does not prove the leg is optimal, and a compromised agent retains freedom to choose a suboptimal but still corrective leg. What it forecloses is the unbounded case: the agent cannot churn the position back and forth, cannot buy what is already at or above target, and cannot spend beyond the cap. That is a weaker guarantee than "every action reduces distance from target", and the difference is stated here rather than glossed.
+
+**The division of labour.** The contract bounds direction and size. The agent optimises. The agent has prices and does the weight-space work; the contract has no prices and does not pretend to. Weight drift is the agent's problem, not the contract's, and that separation is clean rather than a compromise.
+
+**Targets are share quantities, and this is a feature.** Targets are expressed in `sharesOf`, not `balanceOf`. The obvious reason is that the direction rule must not be fooled by a rebase. The better reason is durability: a target expressed in shares **survives a dividend or a split without amendment**, while a target expressed in balance terms silently becomes wrong the moment a CRWDx-style event fires. CRWDx already sits at a multiplier of 4.0 — a balance target set before that event would now be wrong by 300%, with no transaction having occurred to signal it.
+
+So the coarser guarantee is also the more durable one. That is worth stating as a design property, not apologising for.
+
+The honest limitation remains: a share quantity is a proxy for the value weights the product cares about, and it drifts from them as prices move. Re-targeting is an owner action, never an agent one.
+
+**Every leg has USDC on one side.** Token-to-token legs are rejected. Beyond removing an unbounded-churn surface, this means cap accounting is always denominated in the unit the cap is written in. No conversion, no oracle, no ambiguity about what "spent" means.
 
 Caps are denominated in USDC throughout, never in basket-token units. USDC does not rebase; xStocks do. A cap expressed in a rebasing token would silently change meaning when a multiplier activates.
 

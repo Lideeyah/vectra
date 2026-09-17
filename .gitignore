@@ -3,3 +3,6 @@
 !.env.example
 __pycache__/
 .venv/
+cache/
+out/
+broadcast/
