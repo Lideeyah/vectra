@@ -68,6 +68,21 @@ contract VectraMandate is ReentrancyGuard {
     /// @notice The accounting unit. Does not rebase, so all caps are denominated in it.
     address public immutable usdc;
 
+    /// @notice Creation parameters. A struct rather than a parameter list so the
+    ///         frontend constructs one object, and so adding a field later does
+    ///         not reshape a positional signature — which cannot be changed
+    ///         after deployment.
+    struct MandateParams {
+        address[] tokens;
+        uint16[] weightsBps;
+        uint256[] targetShares;
+        uint16 driftBps;
+        uint256 maxLegUsdc;
+        uint256 totalCapUsdc;
+        uint64 expiry;
+        address agent;
+    }
+
     struct Mandate {
         address owner;
         address agent;
@@ -123,53 +138,50 @@ contract VectraMandate is ReentrancyGuard {
 
     // ---------------------------------------------------------------- mandate
 
-    function createMandate(
-        address[] calldata tokens,
-        uint16[] calldata weightsBps,
-        uint256[] calldata targetShares,
-        uint16 driftBps,
-        uint256 maxLegUsdc,
-        uint256 totalCapUsdc,
-        uint64 expiry,
-        address agent
-    ) external returns (uint256 id) {
-        uint256 n = tokens.length;
+    function createMandate(MandateParams calldata p) external returns (uint256 id) {
+        _validate(p);
+
+        id = nextMandateId++;
+        Mandate storage m = _mandates[id];
+        m.owner = msg.sender;
+        m.agent = p.agent;
+        m.expiry = p.expiry;
+        m.driftBps = p.driftBps;
+        m.maxLegUsdc = p.maxLegUsdc;
+        m.totalCapUsdc = p.totalCapUsdc;
+        m.tokens = p.tokens;
+        m.weightsBps = p.weightsBps;
+        m.targetShares = p.targetShares;
+
+        activeMandateOf[msg.sender] = id;
+        emit MandateCreated(id, msg.sender, p.agent);
+    }
+
+    function _validate(MandateParams calldata p) private view {
+        uint256 n = p.tokens.length;
         if (n == 0 || n > MAX_BASKET) revert BadBasket();
-        if (weightsBps.length != n || targetShares.length != n) revert BadBasket();
-        if (agent == address(0) || maxLegUsdc == 0 || totalCapUsdc == 0) revert BadBasket();
-        if (driftBps == 0 || driftBps > BPS) revert BadWeights();
-        if (expiry <= block.timestamp || expiry > block.timestamp + MAX_HORIZON) {
+        if (p.weightsBps.length != n || p.targetShares.length != n) revert BadBasket();
+        if (p.agent == address(0) || p.maxLegUsdc == 0 || p.totalCapUsdc == 0) {
+            revert BadBasket();
+        }
+        if (p.driftBps == 0 || p.driftBps > BPS) revert BadWeights();
+        if (p.expiry <= block.timestamp || p.expiry > block.timestamp + MAX_HORIZON) {
             revert BadExpiry();
         }
         if (activeMandateOf[msg.sender] != 0) revert AlreadyHasMandate();
 
         uint256 sum;
         for (uint256 i; i < n; ++i) {
-            address t = tokens[i];
+            address t = p.tokens[i];
             if (t == address(0) || t == usdc) revert BadBasket();
             // Reject duplicates: a repeated token would make the direction rule
             // ambiguous about which target applies.
             for (uint256 j; j < i; ++j) {
-                if (tokens[j] == t) revert BadBasket();
+                if (p.tokens[j] == t) revert BadBasket();
             }
-            sum += weightsBps[i];
+            sum += p.weightsBps[i];
         }
         if (sum != BPS) revert BadWeights();
-
-        id = nextMandateId++;
-        Mandate storage m = _mandates[id];
-        m.owner = msg.sender;
-        m.agent = agent;
-        m.expiry = expiry;
-        m.driftBps = driftBps;
-        m.maxLegUsdc = maxLegUsdc;
-        m.totalCapUsdc = totalCapUsdc;
-        m.tokens = tokens;
-        m.weightsBps = weightsBps;
-        m.targetShares = targetShares;
-
-        activeMandateOf[msg.sender] = id;
-        emit MandateCreated(id, msg.sender, agent);
     }
 
     // ---------------------------------------------------------------- execute

@@ -5,7 +5,7 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
-via_ir = true
+via_ir = false
 fs_permissions = [{ access = "read", path = "./data" }]
 
 [rpc_endpoints]

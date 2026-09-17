@@ -50,10 +50,16 @@ contract VectraMandateTest is Test {
         targets[0] = TARGET_SHARES;
         targets[1] = TARGET_SHARES;
 
-        mandateId = vectra.createMandate(
-            tokens, weights, targets, 500, MAX_LEG, TOTAL_CAP,
-            uint64(block.timestamp + 30 days), agent
-        );
+        mandateId = vectra.createMandate(VectraMandate.MandateParams({
+            tokens: tokens,
+            weightsBps: weights,
+            targetShares: targets,
+            driftBps: 500,
+            maxLegUsdc: MAX_LEG,
+            totalCapUsdc: TOTAL_CAP,
+            expiry: uint64(block.timestamp + 30 days),
+            agent: agent
+        }));
         vm.stopPrank();
     }
 
@@ -313,8 +319,16 @@ contract VectraMandateTest is Test {
 
         vm.prank(stranger);
         vm.expectRevert(VectraMandate.BadWeights.selector);
-        vectra.createMandate(tokens, weights, targets, 500, MAX_LEG, TOTAL_CAP,
-            uint64(block.timestamp + 1 days), agent);
+        vectra.createMandate(VectraMandate.MandateParams({
+            tokens: tokens,
+            weightsBps: weights,
+            targetShares: targets,
+            driftBps: 500,
+            maxLegUsdc: MAX_LEG,
+            totalCapUsdc: TOTAL_CAP,
+            expiry: uint64(block.timestamp + 1 days),
+            agent: agent
+        }));
     }
 
     /// @notice Allowance must go to the spender, which on OKX is frequently not
