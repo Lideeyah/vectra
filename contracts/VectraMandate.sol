@@ -58,6 +58,7 @@ contract VectraMandate is ReentrancyGuard {
     uint16 public constant BPS = 10_000;
     uint256 public constant MAX_BASKET = 10;
     uint64 public constant MAX_HORIZON = 365 days;
+    uint256 public constant MAX_SWEEP = 8;
 
     /// @notice The aggregator contract this mandate may call. Immutable by design.
     address public immutable router;
@@ -191,13 +192,26 @@ contract VectraMandate is ReentrancyGuard {
      * @param routerCalldata Swap calldata obtained from the aggregator this cycle.
      *        Forwarded verbatim to `router` and never constructed here.
      */
+    /**
+     * @param sweep Intermediate tokens the route passes through, which the
+     *        contract must not be left holding. Routes on this chain go through
+     *        wrapped, non-rebasing versions of the xStocks — a USDC to NVDAx
+     *        swap touches wNVDAx — so asserting only on tokenIn and tokenOut
+     *        would pass while the contract still held wrapper dust.
+     *
+     *        Declaring a token here can only cause its balance to be sent to
+     *        the mandate owner, so a malicious agent gains nothing by adding
+     *        entries. Omitting one is the risk, and it is the agent's job to
+     *        declare every token in the route it just quoted.
+     */
     function execute(
         uint256 id,
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
         uint256 minOut,
-        bytes calldata routerCalldata
+        bytes calldata routerCalldata,
+        address[] calldata sweep
     ) external nonReentrant {
         Mandate storage m = _mandates[id];
         if (m.owner == address(0) || m.revoked || m.paused) revert MandateInactive();
@@ -233,32 +247,59 @@ contract VectraMandate is ReentrancyGuard {
         // Clear any residual approval regardless of what the router consumed.
         IERC20(tokenIn).forceApprove(spender, 0);
 
-        // Never compute the received amount as a delta. A rebase can move
-        // balances mid-transaction with no transfer, which makes
-        // "after = before - sent" false. Read what is actually held, now.
-        uint256 received = IERC20(tokenOut).balanceOf(address(this));
-        if (received < minOut) revert InsufficientOutput();
-
-        IERC20(tokenOut).safeTransfer(owner_, received);
-
-        // Return any input the router did not consume, read fresh for the same reason.
-        uint256 leftover = IERC20(tokenIn).balanceOf(address(this));
-        if (leftover != 0) {
-            IERC20(tokenIn).safeTransfer(owner_, leftover);
-        }
+        (uint256 received, uint256 leftover) =
+            _settle(owner_, tokenIn, tokenOut, minOut, sweep);
 
         if (tokenIn == usdc) {
             // Cap counts what was actually spent, not what was requested.
             m.spentUsdc += amountIn - leftover;
         }
 
-        // The invariant that bounds every bug in this contract.
+        emit Executed(id, tokenIn, tokenOut, amountIn, received);
+    }
+
+    /**
+     * @dev Post-swap settlement. Nothing here is computed as a delta: a rebase
+     *      can move balances mid-transaction with no transfer, so every amount
+     *      is read from what the contract actually holds at that moment.
+     *
+     *      Sweeping covers route intermediates — the wrapped, non-rebasing
+     *      versions the xStock pools actually hold. The invariant is enforced
+     *      over the declared set; the EVM cannot enumerate every token, so an
+     *      intermediate the agent fails to declare is the residual risk.
+     */
+    function _settle(
+        address owner_,
+        address tokenIn,
+        address tokenOut,
+        uint256 minOut,
+        address[] calldata sweep
+    ) private returns (uint256 received, uint256 leftover) {
+        received = IERC20(tokenOut).balanceOf(address(this));
+        if (received < minOut) revert InsufficientOutput();
+        IERC20(tokenOut).safeTransfer(owner_, received);
+
+        leftover = IERC20(tokenIn).balanceOf(address(this));
+        if (leftover != 0) IERC20(tokenIn).safeTransfer(owner_, leftover);
+
+        uint256 n = sweep.length;
+        if (n > MAX_SWEEP) revert BadBasket();
+        for (uint256 i; i < n; ++i) {
+            address s = sweep[i];
+            if (s == tokenIn || s == tokenOut) continue;
+            uint256 stuck = IERC20(s).balanceOf(address(this));
+            if (stuck != 0) IERC20(s).safeTransfer(owner_, stuck);
+        }
+
         if (IERC20(tokenIn).balanceOf(address(this)) != 0
             || IERC20(tokenOut).balanceOf(address(this)) != 0) {
             revert ContractRetainedFunds();
         }
-
-        emit Executed(id, tokenIn, tokenOut, amountIn, received);
+        for (uint256 i; i < n; ++i) {
+            if (IERC20(sweep[i]).balanceOf(address(this)) != 0) {
+                revert ContractRetainedFunds();
+            }
+        }
     }
 
     /// @dev Size and direction are all the contract can check without prices.

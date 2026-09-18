@@ -65,12 +65,16 @@ contract VectraMandateTest is Test {
 
     // ------------------------------------------------------------- helpers
 
+    function _none() internal pure returns (address[] memory a) {
+        a = new address[](0);
+    }
+
     function _buy(uint256 spend, uint256 give, uint256 minOut) internal {
         bytes memory cd = abi.encodeCall(
             MockRouter.swap, (address(usdc), address(nvda), spend, give)
         );
         vm.prank(agent);
-        vectra.execute(mandateId, address(usdc), address(nvda), spend, minOut, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), spend, minOut, cd, _none());
     }
 
     // ------------------------------------------------- the zero balance rule
@@ -95,7 +99,7 @@ contract VectraMandateTest is Test {
             (address(usdc), address(nvda), 5e6, 1e18, 2e18) // 2:1 split mid-call
         );
         vm.prank(agent);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
 
         // 1e18 delivered as 1e18 shares, then the multiplier doubled.
         assertEq(nvda.sharesOf(owner), 1e18, "shares wrong");
@@ -110,7 +114,7 @@ contract VectraMandateTest is Test {
             (address(usdc), address(nvda), 5e6, 1e18, 4e18) // CRWDx-style 4x
         );
         vm.prank(agent);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
 
         assertEq(nvda.balanceOf(owner), 1e18, "owner balance wrong");
         assertEq(nvda.balanceOf(address(vectra)), 0, "contract retained");
@@ -126,7 +130,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.InsufficientOutput.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     // ------------------------------------------------------- router outcomes
@@ -137,7 +141,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.InsufficientOutput.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     /// @notice A router may deliver more than quoted. The surplus belongs to the
@@ -155,7 +159,7 @@ contract VectraMandateTest is Test {
             MockRouter.swap, (address(usdc), address(nvda), 3e6, 1e18)
         );
         vm.prank(agent);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
 
         (,,,,,,,, uint256 spent) = vectra.mandate(mandateId);
         assertEq(spent, 3e6, "cap must count what was spent, not requested");
@@ -167,7 +171,7 @@ contract VectraMandateTest is Test {
         bytes memory cd = abi.encodeCall(MockRouter.boom, ("ROUTER_FAIL"));
         vm.prank(agent);
         vm.expectRevert(bytes("ROUTER_FAIL"));
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     // -------------------------------------------------------- direction rule
@@ -179,7 +183,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.WrongDirection.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_CannotSellWhenAtOrBelowTarget() public {
@@ -189,7 +193,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.WrongDirection.selector);
-        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, cd);
+        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, cd, _none());
     }
 
     function test_CanSellWhenAboveTarget() public {
@@ -199,7 +203,7 @@ contract VectraMandateTest is Test {
             MockRouter.swap, (address(nvda), address(usdc), 1e18, 5e6)
         );
         vm.prank(agent);
-        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, cd);
+        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, cd, _none());
 
         assertEq(nvda.balanceOf(address(vectra)), 0);
         assertEq(usdc.balanceOf(address(vectra)), 0);
@@ -220,6 +224,50 @@ contract VectraMandateTest is Test {
         assertEq(nvda.balanceOf(address(vectra)), 0);
     }
 
+    // ---------------------------------------------- route intermediates (dust)
+
+    /// @notice Pools on X Layer hold wrapped, non-rebasing versions of the
+    ///         xStocks, so a swap touches a token that is neither tokenIn nor
+    ///         tokenOut. Declared in sweep, it reaches the owner.
+    function test_WrapperDustDeclared_IsSweptToOwner() public {
+        MockRebasingToken wrapper = new MockRebasingToken("Wrapped NVIDIA xStock", "wNVDAx");
+        wrapper.mintShares(address(router), 100e18);
+
+        bytes memory cd = abi.encodeCall(
+            MockRouter.swapLeavingDust,
+            (address(usdc), address(nvda), 5e6, 1e18, address(wrapper), 7e17)
+        );
+        address[] memory sweep = new address[](1);
+        sweep[0] = address(wrapper);
+
+        vm.prank(agent);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, sweep);
+
+        assertEq(wrapper.balanceOf(owner), 7e17, "dust not forwarded to owner");
+        assertEq(wrapper.balanceOf(address(vectra)), 0, "dust retained");
+    }
+
+    /// @notice The honest limit. The EVM cannot enumerate tokens, so an
+    ///         intermediate the agent fails to declare is NOT caught: the
+    ///         contract keeps it and the invariant still passes. This is the
+    ///         residual risk, asserted rather than hidden.
+    function test_WrapperDustUndeclared_IsRetained_KnownLimit() public {
+        MockRebasingToken wrapper = new MockRebasingToken("Wrapped NVIDIA xStock", "wNVDAx");
+        wrapper.mintShares(address(router), 100e18);
+
+        bytes memory cd = abi.encodeCall(
+            MockRouter.swapLeavingDust,
+            (address(usdc), address(nvda), 5e6, 1e18, address(wrapper), 7e17)
+        );
+
+        vm.prank(agent);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
+
+        assertEq(wrapper.balanceOf(address(vectra)), 7e17,
+            "undeclared intermediate is retained - documented limit");
+        assertEq(wrapper.balanceOf(owner), 0);
+    }
+
     // ------------------------------------------------------- access and caps
 
     function test_OnlyAgentCanExecute() public {
@@ -228,7 +276,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(stranger);
         vm.expectRevert(VectraMandate.NotAgent.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_LegLargerThanMaxReverts() public {
@@ -237,7 +285,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.LegTooLarge.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 6e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 6e6, 1e18, cd, _none());
     }
 
     function test_TotalCapEnforced() public {
@@ -252,7 +300,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.CapExceeded.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e17, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e17, cd, _none());
     }
 
     function test_TokenToTokenRejected() public {
@@ -261,7 +309,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.TokenNotInBasket.selector);
-        vectra.execute(mandateId, address(nvda), address(tsla), 1e18, 1e18, cd);
+        vectra.execute(mandateId, address(nvda), address(tsla), 1e18, 1e18, cd, _none());
     }
 
     function test_PausedBlocksExecution() public {
@@ -272,7 +320,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.MandateInactive.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_RevokedIsPermanent() public {
@@ -287,7 +335,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.MandateInactive.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_ExpiredMandateCannotExecute() public {
@@ -297,7 +345,7 @@ contract VectraMandateTest is Test {
         );
         vm.prank(agent);
         vm.expectRevert(VectraMandate.MandateInactive.selector);
-        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_OnlyOwnerMayPauseOrRevoke() public {

@@ -140,6 +140,16 @@ contract MockRouter {
         if (give > 0) IERC20(tokenOut).transfer(msg.sender, give);
     }
 
+    /// @dev Swaps and leaves dust in a third token — a route wrapper, in practice.
+    function swapLeavingDust(
+        address tokenIn, address tokenOut, uint256 pull, uint256 give,
+        address dustToken, uint256 dust
+    ) external {
+        if (pull > 0) IERC20(tokenIn).transferFrom(msg.sender, address(this), pull);
+        if (give > 0) IERC20(tokenOut).transfer(msg.sender, give);
+        if (dust > 0) IERC20(dustToken).transfer(msg.sender, dust);
+    }
+
     function boom(string calldata reason) external pure {
         revert(reason);
     }
