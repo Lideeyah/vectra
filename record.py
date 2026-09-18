@@ -24,6 +24,7 @@ import xlayer
 NA = "NA"
 CADENCE_MIN = 5
 NOTIONAL_USD = 5.0
+RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "50"))
 THROTTLE_S = 1.1
 
 CONSTITUENTS = Path("data/constituents.json")
@@ -141,19 +142,9 @@ def quote_row(cyc, bucket, usdc, asset):
     return row
 
 
-def main():
-    cyc = os.environ.get("GITHUB_RUN_ID") or str(int(time.time()))
-    started = now()
-    bucket = bucket_of(started)
-
-    cons = read_constituents()
-    if cons is None:
-        print("data/constituents.json missing — run discover.py first to fix the set.",
-              file=sys.stderr)
-        return 1
-
-    usdc = cons["usdc"]
-    assets = cons["constituents"]
+def record_bucket(cyc, usdc, assets):
+    """One bucket. Returns (written, ok_count)."""
+    bucket = bucket_of(now())
     done = existing_keys()
 
     rows, skipped = [], 0
@@ -165,23 +156,60 @@ def main():
         time.sleep(THROTTLE_S)
 
     if not rows:
-        print(f"bucket {bucket} already complete ({skipped} assets); nothing written.")
-        return 0
+        print(f"{bucket}: already complete ({skipped} assets)")
+        return 0, 0
 
     append(rows)
     ok = sum(1 for r in rows if r["status"] == "ok")
-    failed = len(rows) - ok
     mult_ok = sum(1 for r in rows if r["multiplier"] != NA)
-    print(f"bucket {bucket}: {ok} ok, {failed} failed, {skipped} deduped, "
-          f"{mult_ok}/{len(rows)} multipliers read")
+    print(f"{bucket}: {ok}/{len(rows)} ok, {mult_ok} multipliers, {skipped} deduped")
     for r in rows:
-        if r["status"] == "ok":
-            print(f"  {r['symbol']:<10} ${r['price_usd']:<14} impact={r['price_impact_pct']}")
-        else:
-            print(f"  {r['symbol']:<10} FAILED {r['reason']}")
+        if r["status"] != "ok":
+            print(f"    {r['symbol']:<10} FAILED {r['reason'][:80]}")
+    return len(rows), ok
 
-    # Exit non-zero only if nothing could be written at all.
-    return 0 if ok > 0 else 2
+
+def main():
+    """Record continuously for RUN_MINUTES rather than once per invocation.
+
+    GitHub's five minute cron is unreliable — observed firing roughly every four
+    hours, giving 2.7% coverage of the intended series. Since the series cannot
+    be backfilled, each job stays alive and records its own buckets on a real
+    clock instead of depending on the scheduler to wake it.
+    """
+    cyc = os.environ.get("GITHUB_RUN_ID") or str(int(time.time()))
+    cons = read_constituents()
+    if cons is None:
+        print("data/constituents.json missing — run discover.py first to fix the set.",
+              file=sys.stderr)
+        return 1
+
+    usdc = cons["usdc"]
+    assets = cons["constituents"]
+    deadline = time.time() + RUN_MINUTES * 60
+    total_rows = total_ok = cycles = 0
+
+    print(f"recording {len(assets)} assets for {RUN_MINUTES} min "
+          f"on a {CADENCE_MIN} min cadence")
+
+    while True:
+        wrote, ok = record_bucket(cyc, usdc, assets)
+        total_rows += wrote
+        total_ok += ok
+        cycles += 1
+
+        # Sleep to the start of the next bucket, not a fixed interval, so
+        # readings stay aligned to the cadence even when a cycle runs long.
+        nxt = (now() + timedelta(minutes=CADENCE_MIN)).replace(second=0, microsecond=0)
+        nxt = nxt.replace(minute=(nxt.minute // CADENCE_MIN) * CADENCE_MIN)
+        wait = (nxt - now()).total_seconds()
+        if time.time() + max(wait, 0) > deadline:
+            break
+        if wait > 0:
+            time.sleep(wait)
+
+    print(f"\n{cycles} cycles, {total_rows} rows, {total_ok} quotes recorded")
+    return 0 if total_ok > 0 else 2
 
 
 if __name__ == "__main__":
