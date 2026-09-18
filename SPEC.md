@@ -361,11 +361,15 @@ Each of these can invalidate part of the design and each is cheap. Do them befor
 
 **Which xStocks exist on X Layer**, with their contract addresses and decimals, pulled from the aggregator rather than assumed. *(In progress. The universe is far larger than this document assumed — hundreds of listings, not a dozen. See 16.)*
 
-**The OKX DEX aggregator router address on X Layer**, and the exact calldata shape its swap endpoint returns, since the contract will be forwarding it.
+**The OKX DEX aggregator router address on X Layer**, and the exact calldata shape its swap endpoint returns, since the contract will be forwarding it. **ANSWERED.** Call target `0x7c5bee2a8091c3ef39072f64f18fac913060aeaf`; approve spender `0x8b773D83bc66Be128c60e07E17C8901f7a64F000`. **These differ**, so an allowance granted to the call target would make every swap revert. Calldata: selector `0xf2c42696`, 3076 bytes, `tx.value` 0. The route was Uniswap V4 at 100%.
 
-**Whether the aggregator's swap endpoint permits a recipient other than the caller**, which determines whether output can be sent straight to the user or must pass through the contract.
+The payload encodes its caller, so the agent must request it with `userWalletAddress` set to the **contract**, not the mandate owner.
 
-**Actual gas cost of an execute call on X Layer**, to size the keeper's OKB balance.
+**Whether the aggregator's swap endpoint permits a recipient other than the caller**, which determines whether output can be sent straight to the user or must pass through the contract. **ANSWERED: yes.** `swapReceiverAddress` is accepted and the address appears in the returned calldata.
+
+This is deliberately *not* used. If the router delivered straight to the owner, the contract would hold nothing to measure and `minOut` could not be enforced on chain — the only remaining check would be a balance delta on the owner, which a mid-transaction rebase makes unreliable. Output therefore continues to land on the contract, which verifies `minOut` against what it actually holds and forwards in the same transaction. Custody is unchanged either way, since the contract's balance is asserted to zero at the end of every call.
+
+**Actual gas cost of an execute call on X Layer**, to size the keeper's OKB balance. **ANSWERED.** The swap alone quotes 550,258 gas at 0.027 gwei: **0.0000149 OKB**, about $0.0007. With contract overhead, roughly 700k gas, **0.0000189 OKB** or $0.00095 per leg. A thousand legs costs about 0.019 OKB. The keeper needs a trivial balance, and "network fee shown as Free" in the interface is confirmed as near-zero rather than literally zero.
 
 **Liquidity across ten different xStocks at five dollars each**, not just NVDAx at one dollar. The thin ones matter more than the liquid one. *(Being answered at far greater scale by the liquidity probe.)*
 

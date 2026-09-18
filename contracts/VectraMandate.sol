@@ -231,11 +231,16 @@ contract VectraMandate is ReentrancyGuard {
         IERC20(tokenIn).forceApprove(spender, amountIn);
 
         // ---------------------------------------------------------------
-        // UNCONFIRMED CALL SITE.
-        // The aggregator's swap payload shape on X Layer is not yet verified
-        // (SPEC 13). Nothing below assumes anything about the calldata beyond
-        // it being addressed to `router`. Do not deploy until verify_swap.py
-        // has confirmed the router address, the spender, and this shape.
+        // VERIFIED against a live X Layer swap payload (data/verifications/swap.json):
+        //   call target  0x7c5bee2a8091c3ef39072f64f18fac913060aeaf
+        //   spender      0x8b773D83bc66Be128c60e07E17C8901f7a64F000
+        //   selector     0xf2c42696, 3076 bytes, tx.value 0, gas ~550k
+        // The two addresses DIFFER, which is why they are separate immutables.
+        //
+        // The agent must request the payload with userWalletAddress set to THIS
+        // contract, not the mandate owner: the calldata encodes its caller, and
+        // a payload built for the owner's address will not work when the
+        // contract is the one calling.
         // ---------------------------------------------------------------
         (bool ok, bytes memory ret) = router.call(routerCalldata);
         if (!ok) {
