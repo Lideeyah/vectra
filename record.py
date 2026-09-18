@@ -24,7 +24,7 @@ import xlayer
 NA = "NA"
 CADENCE_MIN = 5
 NOTIONAL_USD = 5.0
-RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "50"))
+RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "330"))
 THROTTLE_S = 1.1
 
 CONSTITUENTS = Path("data/constituents.json")

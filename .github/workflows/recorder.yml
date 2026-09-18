@@ -20,7 +20,7 @@ concurrency:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -37,9 +37,11 @@ jobs:
           fi
 
       - name: Record
-        # Records its own buckets for ~50 minutes rather than trusting cron to
-        # fire. Cut off runs still reach the commit step below.
-        timeout-minutes: 55
+        # Records its own buckets for 5.5 hours. GitHub caps a job at 6, and a
+        # long job means cron only has to fire a few times a day rather than
+        # 288 times — which it demonstrably does not do. Cut off runs still
+        # reach the commit step below.
+        timeout-minutes: 340
         continue-on-error: true
         env:
           OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
