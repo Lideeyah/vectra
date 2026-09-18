@@ -83,17 +83,33 @@ def approve_spender(token):
     return {"spender": None, "httpStatus": status, "error": body}
 
 
-def swap(token, receiver=None):
-    params = {
+def base_params(token):
+    return {
         "amount": str(int(AMOUNT_USD * 10 ** USDC_DECIMALS)),
         "fromTokenAddress": USDC,
         "toTokenAddress": token,
         "slippage": SLIPPAGE,
         "userWalletAddress": WALLET,
     }
+
+
+def variants(token):
+    """Parameter shapes to try. v6 may spell these differently from v5, and one
+    run that reports every shape beats several runs guessing one at a time."""
+    b = base_params(token)
+    yield "base", dict(b)
+    yield "slippage as percent", {**b, "slippage": "0.5"}
+    yield "userAddress spelling", {
+        k: v for k, v in b.items() if k != "userWalletAddress"} | {"userAddress": WALLET}
+    yield "no slippage", {k: v for k, v in b.items() if k != "slippage"}
+    yield "with autoSlippage", {**b, "autoSlippage": "true"}
+
+
+def swap(token, receiver=None, params=None):
+    p = params if params is not None else base_params(token)
     if receiver:
-        params["swapReceiverAddress"] = receiver
-    return call("swap", params)
+        p = {**p, "swapReceiverAddress": receiver}
+    return call("swap", p)
 
 
 def summarise(body):
@@ -127,16 +143,20 @@ def main():
         if addr.lower() in [t[1].lower() for t in tried]:
             continue
         tried.append((sym, addr))
-        print(f"trying {sym} {addr} ...")
-        ok, status, body = swap(addr)
-        if ok:
-            chosen = (sym, addr, body)
-            print(f"  swap payload returned for {sym}\n")
+        print(f"trying {sym} {addr}")
+        for label, params in variants(addr):
+            ok, status, body = swap(addr, params=params)
+            if ok:
+                chosen = (sym, addr, body, params)
+                print(f"  [{label}] PAYLOAD RETURNED\n")
+                break
+            atts = (body.get("attempts") if isinstance(body, dict) else None) or []
+            head = atts[0] if atts else {"path": "?", "code": "?",
+                                         "msg": str(body)[:160]}
+            print(f"  [{label}] code={head.get('code')} {str(head.get('msg'))[:110]}")
+        if chosen:
             break
-        msg = body.get("msg") if isinstance(body, dict) else str(body)[:200]
-        code = body.get("code") if isinstance(body, dict) else "?"
-        print(f"  no payload (http={status} code={code} msg={msg})")
-        if len(tried) >= 8:
+        if len(tried) >= 4:
             break
 
     if not chosen:
@@ -144,7 +164,7 @@ def main():
         print("Tried: " + ", ".join(s for s, _ in tried), file=sys.stderr)
         return 1
 
-    sym, addr, body = chosen
+    sym, addr, body, winning_params = chosen
     base = summarise(body)
 
     print("=" * 68)
@@ -173,7 +193,7 @@ def main():
     print("\n" + "=" * 68)
     print("3. ALTERNATE RECIPIENT  (verification 13.4)")
     print("=" * 68)
-    ok2, status2, body2 = swap(addr, receiver=PROBE_RECIPIENT)
+    ok2, status2, body2 = swap(addr, receiver=PROBE_RECIPIENT, params=winning_params)
     recipient = {"supported": False}
     if not ok2:
         msg = body2.get("msg") if isinstance(body2, dict) else str(body2)[:200]

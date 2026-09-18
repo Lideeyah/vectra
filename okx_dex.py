@@ -125,15 +125,18 @@ def endpoint(name, params, chain=X_LAYER):
         attempts.append((path, status, body))
         if _ok(body):
             return status, body, attempts
-    last_status, last_body = attempts[-1][1], attempts[-1][2]
-    merged = dict(last_body) if isinstance(last_body, dict) else {"body": last_body}
+    # Report the PRIMARY version's failure, not the last one tried. v5 answers
+    # almost everything with its deprecation notice, and letting that stand in
+    # for v6's real error is the same masking bug twice over.
+    primary_status, primary_body = attempts[0][1], attempts[0][2]
+    merged = dict(primary_body) if isinstance(primary_body, dict) else {"body": primary_body}
     merged["attempts"] = [
         {"path": p, "status": s,
          "code": b.get("code") if isinstance(b, dict) else None,
          "msg": (b.get("msg") if isinstance(b, dict) else str(b))[:200]}
         for p, s, b in attempts
     ]
-    return last_status, merged, attempts
+    return primary_status, merged, attempts
 
 
 def all_tokens(chain=X_LAYER):
