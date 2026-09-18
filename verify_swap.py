@@ -32,7 +32,7 @@ PROBE_RECIPIENT = "0x1111111111111111111111111111111111111111"
 
 AMOUNT_USD = 5.0
 USDC_DECIMALS = 6
-SLIPPAGE = "0.01"
+SLIPPAGE_PERCENT = "0.5"   # half a percent, pending unit confirmation
 
 OUT = Path("data/verifications/swap.json")
 
@@ -84,25 +84,26 @@ def approve_spender(token):
 
 
 def base_params(token):
+    """v6 names the slippage parameter slippagePercent, not slippage. v5's
+    spelling returns code 50014 'Parameter slippagePercent cannot be empty'."""
     return {
         "amount": str(int(AMOUNT_USD * 10 ** USDC_DECIMALS)),
         "fromTokenAddress": USDC,
         "toTokenAddress": token,
-        "slippage": SLIPPAGE,
+        "slippagePercent": SLIPPAGE_PERCENT,
         "userWalletAddress": WALLET,
     }
 
 
 def variants(token):
-    """Parameter shapes to try. v6 may spell these differently from v5, and one
-    run that reports every shape beats several runs guessing one at a time."""
+    """Remaining unknown is the unit: whether slippagePercent takes a percent
+    (0.5 meaning half a percent) or a fraction (0.005). Try both, plus v5's
+    spelling alongside in case the endpoint accepts either."""
     b = base_params(token)
-    yield "base", dict(b)
-    yield "slippage as percent", {**b, "slippage": "0.5"}
-    yield "userAddress spelling", {
-        k: v for k, v in b.items() if k != "userWalletAddress"} | {"userAddress": WALLET}
-    yield "no slippage", {k: v for k, v in b.items() if k != "slippage"}
-    yield "with autoSlippage", {**b, "autoSlippage": "true"}
+    yield "slippagePercent=0.5", dict(b)
+    yield "slippagePercent=1", {**b, "slippagePercent": "1"}
+    yield "slippagePercent=0.005", {**b, "slippagePercent": "0.005"}
+    yield "both spellings", {**b, "slippage": "0.005"}
 
 
 def swap(token, receiver=None, params=None):
