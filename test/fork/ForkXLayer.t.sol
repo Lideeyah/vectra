@@ -160,7 +160,7 @@ contract ForkXLayerTest is Test {
         IERC20(NVDAX).approve(address(sellVectra), type(uint256).max);
         id = sellVectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: weights, targetShares: targets,
-            driftBps: 500, maxLegUsdc: 5e6, totalCapUsdc: 50e6,
+            driftBps: 500, maxLegUsdc: 5e6, totalCapUsdc: 50e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();
@@ -272,7 +272,7 @@ contract ForkXLayerTest is Test {
         IERC20(USDC).approve(address(v), type(uint256).max);
         uint256 id = v.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: 5e6, totalCapUsdc: 50e6,
+            maxLegUsdc: 5e6, totalCapUsdc: 50e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();
@@ -388,7 +388,7 @@ contract ForkXLayerTest is Test {
             targetShares: targets,
             driftBps: 500,
             maxLegUsdc: 5e6,
-            totalCapUsdc: 50e6,
+            totalCapUsdc: 50e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days),
             agent: agent
         }));

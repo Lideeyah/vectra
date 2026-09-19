@@ -51,7 +51,7 @@ contract RealRouterTest is Test {
         IERC20(USDC).approve(address(vectra), type(uint256).max);
         id = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: 5e6, totalCapUsdc: 50e6,
+            maxLegUsdc: 5e6, totalCapUsdc: 50e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();

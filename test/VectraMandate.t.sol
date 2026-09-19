@@ -56,7 +56,7 @@ contract VectraMandateTest is Test {
             targetShares: targets,
             driftBps: 500,
             maxLegUsdc: MAX_LEG,
-            totalCapUsdc: TOTAL_CAP,
+            totalCapUsdc: TOTAL_CAP, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days),
             agent: agent
         }));
@@ -145,12 +145,25 @@ contract VectraMandateTest is Test {
     }
 
     /// @notice A router may deliver more than quoted. The surplus belongs to the
-    ///         owner and must not be stranded in the contract.
+    ///         owner and must not be stranded — within the rate bound.
     function test_RouterReturnsMoreThanRequested_AllForwarded() public {
-        _buy(5e6, 3e18, 1e18);
+        // Target 10e18 at 2000bps allows 2e18 of movement per leg.
+        _buy(5e6, 15e17, 1e18);
 
-        assertEq(nvda.balanceOf(owner), 3e18, "surplus not forwarded");
+        assertEq(nvda.balanceOf(owner), 15e17, "surplus not forwarded");
         assertEq(nvda.balanceOf(address(vectra)), 0, "surplus stranded");
+    }
+
+    /// @notice The rate bound applies to a generous fill as well as a hostile
+    ///         one. Over-delivery moves the position faster than the mandate
+    ///         permits, so it is refused rather than accepted as a windfall.
+    function test_OverDeliveryBeyondTheRateBoundIsRefused() public {
+        bytes memory cd = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, 3e18)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.LegMovesTooMuch.selector);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
     }
 
     function test_RouterUnderConsumes_CapCountsActualSpend() public {
@@ -542,7 +555,7 @@ contract VectraMandateTest is Test {
             targetShares: targets,
             driftBps: 500,
             maxLegUsdc: MAX_LEG,
-            totalCapUsdc: TOTAL_CAP,
+            totalCapUsdc: TOTAL_CAP, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 1 days),
             agent: agent
         }));

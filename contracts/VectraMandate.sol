@@ -91,6 +91,13 @@ contract VectraMandate is ReentrancyGuard {
         uint256 maxLegUsdc;
         uint256 totalCapUsdc;
         uint64 expiry;
+        /// @notice Maximum fraction of a token's TARGET share count that one
+        ///         leg may move, in basis points. The USDC leg cap cannot bound
+        ///         a sell, because it is denominated in dollars and the contract
+        ///         has no prices. Shares are a unit the contract already trusts,
+        ///         and a fraction of target is self-scaling across tokens whose
+        ///         unit prices differ by orders of magnitude.
+        uint16 maxLegBpsOfTarget;
         address agent;
     }
 
@@ -98,6 +105,13 @@ contract VectraMandate is ReentrancyGuard {
         address owner;
         address agent;
         uint64 expiry;
+        /// @notice Maximum fraction of a token's TARGET share count that one
+        ///         leg may move, in basis points. The USDC leg cap cannot bound
+        ///         a sell, because it is denominated in dollars and the contract
+        ///         has no prices. Shares are a unit the contract already trusts,
+        ///         and a fraction of target is self-scaling across tokens whose
+        ///         unit prices differ by orders of magnitude.
+        uint16 maxLegBpsOfTarget;
         /// @notice 1 at creation, incremented on every successful amendment.
         ///         Every leg emits the version in force when it ran, which is
         ///         what binds a leg to the target that governed it.
@@ -160,6 +174,7 @@ contract VectraMandate is ReentrancyGuard {
     error InsufficientOutput();
     error ContractRetainedFunds();
     error Overshoot();
+    error LegMovesTooMuch();
     error BadShareReport();
 
     constructor(address router_, address spender_, address usdc_) {
@@ -184,6 +199,7 @@ contract VectraMandate is ReentrancyGuard {
         m.driftBps = p.driftBps;
         m.maxLegUsdc = p.maxLegUsdc;
         m.totalCapUsdc = p.totalCapUsdc;
+        m.maxLegBpsOfTarget = p.maxLegBpsOfTarget;
         m.tokens = p.tokens;
         m.weightsBps = p.weightsBps;
         m.targetShares = p.targetShares;
@@ -211,6 +227,7 @@ contract VectraMandate is ReentrancyGuard {
             revert BadBasket();
         }
         if (p.driftBps == 0 || p.driftBps > BPS) revert BadWeights();
+        if (p.maxLegBpsOfTarget == 0 || p.maxLegBpsOfTarget > BPS) revert BadWeights();
         if (p.expiry <= block.timestamp || p.expiry > block.timestamp + MAX_HORIZON) {
             revert BadExpiry();
         }
@@ -265,12 +282,14 @@ contract VectraMandate is ReentrancyGuard {
         if (tokenIn == tokenOut) revert SameToken();
         if (amountIn == 0) revert LegTooLarge();
 
-        _checkSizeAndDirection(m, tokenIn, tokenOut, amountIn);
-
-        address owner_ = m.owner;
+        // Returns the pre-leg share count it already had to read for the
+        // direction check, so the post-state check can bound how far the
+        // position moved without a second read.
+        uint256 sharesBefore =
+            _checkSizeAndDirection(m, tokenIn, tokenOut, amountIn);
 
         // Pull exactly what this leg requires, straight from the owner.
-        IERC20(tokenIn).safeTransferFrom(owner_, address(this), amountIn);
+        IERC20(tokenIn).safeTransferFrom(m.owner, address(this), amountIn);
 
         // Approve only the spender, only for this leg, and only this amount.
         IERC20(tokenIn).forceApprove(spender, amountIn);
@@ -298,7 +317,7 @@ contract VectraMandate is ReentrancyGuard {
         IERC20(tokenIn).forceApprove(spender, 0);
 
         (uint256 received, uint256 leftover) =
-            _settle(owner_, tokenIn, tokenOut, minOut, sweep);
+            _settle(m.owner, tokenIn, tokenOut, minOut, sweep);
 
         // The direction rule alone reads position BEFORE the leg, so it bounds
         // which way a trade may go but not how far. Without this, a single
@@ -306,7 +325,7 @@ contract VectraMandate is ReentrancyGuard {
         // oscillation would be prevented only while the agent sized legs
         // correctly. That would make the contract trust the agent, which is
         // the thing putting the mandate on chain exists to avoid.
-        _checkPostState(m, tokenIn, tokenOut);
+        _checkPostState(m, tokenIn, tokenOut, sharesBefore);
 
         if (tokenIn == usdc) {
             // Cap counts what was actually spent, not what was requested.
@@ -370,21 +389,32 @@ contract VectraMandate is ReentrancyGuard {
      *      its declaration. At 18 decimals that is ~1e-15 of a token, far below
      *      any economically meaningful overshoot.
      */
-    function _checkPostState(Mandate storage m, address tokenIn, address tokenOut)
-        private
-        view
-    {
-        if (tokenIn == usdc) {
-            uint256 idx = _indexOf(m, tokenOut);
-            if (_sharesAt(m, idx, m.owner) > m.targetShares[idx] + DUST_WEI) {
-                revert Overshoot();
-            }
+    function _checkPostState(
+        Mandate storage m,
+        address tokenIn,
+        address tokenOut,
+        uint256 sharesBefore
+    ) private view {
+        bool buying = tokenIn == usdc;
+        uint256 idx = _indexOf(m, buying ? tokenOut : tokenIn);
+        uint256 sharesAfter = _sharesAt(m, idx, m.owner);
+
+        // Distance: a leg may move toward target but never past it.
+        if (buying) {
+            if (sharesAfter > m.targetShares[idx] + DUST_WEI) revert Overshoot();
         } else {
-            uint256 idx = _indexOf(m, tokenIn);
-            if (_sharesAt(m, idx, m.owner) + DUST_WEI < m.targetShares[idx]) {
-                revert Overshoot();
-            }
+            if (sharesAfter + DUST_WEI < m.targetShares[idx]) revert Overshoot();
         }
+
+        // Rate: and it may move at most a fraction of target in one call.
+        // Without this a sell is bounded only by the total, so the entire
+        // excess above target could leave in a single leg at a hostile price.
+        uint256 moved = sharesAfter > sharesBefore
+            ? sharesAfter - sharesBefore
+            : sharesBefore - sharesAfter;
+        uint256 allowed =
+            (m.targetShares[idx] * m.maxLegBpsOfTarget) / BPS + DUST_WEI;
+        if (moved > allowed) revert LegMovesTooMuch();
     }
 
     /// @dev Size and direction are all the contract can check without prices.
@@ -393,17 +423,19 @@ contract VectraMandate is ReentrancyGuard {
         address tokenIn,
         address tokenOut,
         uint256 amountIn
-    ) private view {
+    ) private view returns (uint256 sharesBefore) {
         if (tokenIn == usdc) {
             // Buying a basket token with USDC.
             uint256 idx = _indexOf(m, tokenOut);
             if (amountIn > m.maxLegUsdc) revert LegTooLarge();
             if (m.spentUsdc + amountIn > m.totalCapUsdc) revert CapExceeded();
-            if (_sharesAt(m, idx, m.owner) >= m.targetShares[idx]) revert WrongDirection();
+            sharesBefore = _sharesAt(m, idx, m.owner);
+            if (sharesBefore >= m.targetShares[idx]) revert WrongDirection();
         } else if (tokenOut == usdc) {
             // Selling a basket token back to USDC.
             uint256 idx = _indexOf(m, tokenIn);
-            if (_sharesAt(m, idx, m.owner) <= m.targetShares[idx]) revert WrongDirection();
+            sharesBefore = _sharesAt(m, idx, m.owner);
+            if (sharesBefore <= m.targetShares[idx]) revert WrongDirection();
         } else {
             // Token-to-token legs are not permitted: neither side is the
             // accounting unit, so neither cap nor direction is checkable.

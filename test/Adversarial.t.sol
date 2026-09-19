@@ -109,7 +109,7 @@ contract AdversarialTest is Test {
         t[1] = TARGET;
         id = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: attacker
         }));
         vm.stopPrank();
@@ -146,6 +146,33 @@ contract AdversarialTest is Test {
 
         assertLe(lost, TOTAL_CAP, "LOSS EXCEEDS THE CAP");
         assertLt(lost, OWNER_USDC, "loss must not reach the whole balance");
+    }
+
+    /// @notice The rate bound, adversarially. Without it the entire excess
+    ///         above target could leave in ONE leg at a hostile price, bounded
+    ///         only by the total. maxLegUsdc cannot stop that: it is priced in
+    ///         dollars and the contract has no prices. Shares can.
+    function test_BlastRadius_SellRateIsBoundedPerLeg() public {
+        uint256 excess = 8e18;
+        nvda.mintShares(owner, TARGET + excess);
+
+        // One leg trying to take the whole excess at once.
+        bytes memory cd = abi.encodeCall(
+            PredatoryRouter.drain, (address(nvda), excess)
+        );
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.LegMovesTooMuch.selector);
+        vectra.execute(id, address(nvda), address(usdc), excess, 0, cd, _none());
+
+        // 2000bps of a 10e18 target is 2e18 per leg, which is permitted.
+        bytes memory ok = abi.encodeCall(
+            PredatoryRouter.drain, (address(nvda), 2e18)
+        );
+        vm.prank(attacker);
+        vectra.execute(id, address(nvda), address(usdc), 2e18, 0, ok, _none());
+
+        console2.log("one-leg drain refused; rate-limited leg permitted");
+        console2.log("shares remaining", nvda.sharesOf(owner));
     }
 
     /// @notice The same attack on the token side. The post-state check should
@@ -219,7 +246,7 @@ contract AdversarialTest is Test {
         t[0] = TARGET;
         uint256 id2 = v.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: attacker
         }));
         vm.stopPrank();
@@ -446,7 +473,7 @@ contract AdversarialTest is Test {
         t[0] = TARGET;
         uint256 otherId = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: address(0xF00D)
         }));
         vm.stopPrank();

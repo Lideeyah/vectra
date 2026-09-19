@@ -129,6 +129,7 @@ The contract therefore bounds the **size and direction** of trades, and leaves t
 - `tokenIn` and `tokenOut` are both either USDC or members of the basket, and are not the same token
 - when spending USDC, `amountIn` is at or below `maxLegUsdc`, and cumulative USDC spend after this leg is at or below `totalCapUsdc`
 - **direction**: USDC may only be spent to buy a token whose share balance is below its target, and a basket token may only be sold when its share balance is above target
+- **rate**: a leg may move at most `maxLegBpsOfTarget` basis points of the token's target share count. The USDC leg cap cannot bound a sell — it is denominated in dollars and the contract has no prices — so the rate bound is expressed in shares, a unit the contract already trusts, as a fraction of target. That is self-scaling across tokens whose unit prices differ by orders of magnitude, and it composes with the rest rather than replacing it: the post-state check bounds the total, this bounds the speed
 - **distance**: after the swap, the position must not have crossed its target — a buy may not leave shares above target, a sell may not leave them below. Checked in share terms, so no oracle is required
 
 The direction rule is what survives the absence of prices. It does not prove the leg is optimal, and a compromised agent retains freedom to choose a suboptimal but still corrective leg. What it forecloses is the unbounded case: the agent cannot churn the position back and forth, cannot buy what is already at or above target, and cannot spend beyond the cap. That is a weaker guarantee than "every action reduces distance from target", and the difference is stated here rather than glossed.
@@ -162,6 +163,16 @@ That was not acceptable. A check which holds only when the agent behaves correct
 The contract therefore also checks **post-state**: after the swap, a buy may not leave shares above target and a sell may not leave them below. This needs no oracle because it is expressed in `sharesOf`, the quantity invariant under a rebase — the same insight the entry-side rule rests on, applied to the other end of the transaction. `DUST_WEI` of slack absorbs the share-conversion rounding described in 5.1.
 
 Target can no longer be crossed, so a reversal can never be legitimised, and oscillation is bounded by the contract rather than by the agent behaving. `test_OversizedSellIsRefused_TargetCannotBeCrossed` asserts the oversized sell reverts, that a correctly sized one still succeeds, and that the rebuy remains refused; `test_OversizedBuyIsRefused` covers the same bound on the buy side.
+
+### 5.2.5 The sell leg is bounded in shares, not dollars
+
+`maxLegUsdc` bounds a buy and cannot bound a sell, because sizing a sell in dollars needs a price the contract does not have. The consequence was that a compromised agent could move the **entire** excess above target in a single leg, at whatever price a hostile router offered — bounded by the total, not by the per-leg limit a user believes they set.
+
+The fix needs no prices, only a unit already trusted. A leg may move at most `maxLegBpsOfTarget` of the token's **target share count**. Shares survive a rebase, and a fraction of target scales itself across tokens priced in single dollars and tokens priced in thousands, so one parameter governs a whole basket without per-token calibration.
+
+It applies in both directions, which has a consequence worth stating: an unusually **generous** fill is refused too. Over-delivery moves the position faster than the mandate permits, so it reverts rather than being accepted as a windfall. That is the correct reading of a rate limit — it bounds movement, not intent.
+
+**Interface copy must say this.** Section 9.1 previously implied the leg cap applied in both directions. It does not. The honest sentence is that the agent may spend at most X dollars in one trade, and may move at most Y percent of a position's target in one trade, and those are different limits in different units.
 
 **Every leg has USDC on one side.** Token-to-token legs are rejected. Beyond removing an unbounded-churn surface, this means cap accounting is always denominated in the unit the cap is written in. No conversion, no oracle, no ambiguity about what "spent" means.
 
@@ -388,7 +399,7 @@ Compose the basket: pick from available xStocks on X Layer, set weights, or take
 
 Set the mandate: drift tolerance, maximum single trade, total spend cap, expiry. Each has a sensible default and an explanation of what it bounds. The user should understand that these are limits on what the agent may do, not settings for how it behaves.
 
-Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total, never more than Y in one trade, only to buy tokens below their target weight and sell tokens above it, until this date, and you can stop it at any time. Selling does not give it more to spend."
+Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total and never more than Y in a single purchase. It may move at most Z percent of any position's target in one trade, in either direction. It may only buy what is below target and sell what is above. It can never take a position past its target. This runs until DATE, selling does not give it more to spend, and you can stop it at any time."
 
 Approve allowances. The agent trades in both directions, so every basket token needs an allowance as well as USDC: a sell pulls the token, a buy pulls USDC. Explain why each is needed, and that each is capped by the mandate's spend limit.
 

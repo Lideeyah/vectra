@@ -50,7 +50,7 @@ contract RebaseSurfaceTest is Test {
         t[0] = TARGET;
         id = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();
@@ -92,7 +92,7 @@ contract RebaseSurfaceTest is Test {
         h.approve(address(vectra), type(uint256).max);
         uint256 id2 = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();
@@ -205,7 +205,7 @@ contract RebaseSurfaceTest is Test {
         vm.expectRevert(VectraMandate.BadShareReport.selector);
         vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
     }
@@ -232,7 +232,7 @@ contract RebaseSurfaceTest is Test {
         h.approve(address(vectra), type(uint256).max);
         uint256 id5 = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         vm.stopPrank();
@@ -270,7 +270,7 @@ contract RebaseSurfaceTest is Test {
         vm.prank(owner4);
         uint256 id4 = vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
-            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6, maxLegBpsOfTarget: 2_000,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
         (, uint256[] memory current,) = vectra.position(id4);
