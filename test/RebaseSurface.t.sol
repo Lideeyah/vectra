@@ -183,9 +183,10 @@ contract RebaseSurfaceTest is Test {
     }
 
     /// @notice The NVDAx proxy hazard: a selector that returns padded data
-    ///         instead of reverting. The 32-byte length check must reject it
-    ///         and fall back rather than decoding garbage as a share count.
-    function test_PaddedGarbageReturnIsRejectedByLengthCheck() public {
+    ///         instead of reverting. A token that answers malformed at creation
+    ///         cannot be put in a basket at all — the probe refuses it, rather
+    ///         than the contract deciding a unit at the moment money moves.
+    function test_MalformedSharesOfCannotEnterABasket() public {
         HostileRebasingToken h = new HostileRebasingToken();
         h.setMultiplier(MULT);
         h.mintShares(owner, 7e18);
@@ -201,17 +202,54 @@ contract RebaseSurfaceTest is Test {
         address owner3 = address(0xC0FFEE);
         h.mintShares(owner3, 7e18);
         vm.prank(owner3);
-        uint256 id3 = vectra.createMandate(VectraMandate.MandateParams({
+        vm.expectRevert(VectraMandate.BadShareReport.selector);
+        vectra.createMandate(VectraMandate.MandateParams({
             tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
             maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
             expiry: uint64(block.timestamp + 30 days), agent: agent
         }));
+    }
 
-        (, uint256[] memory current,) = vectra.position(id3);
-        assertEq(current[0], h.balanceOf(owner3),
-            "garbage return was not rejected; fell through to a bogus value");
-        assertTrue(current[0] < type(uint128).max, "decoded padded garbage");
-        console2.log("padded return rejected, fell back to balanceOf:", current[0]);
+    /// @notice The hole this closed: a token that answers correctly at creation
+    ///         and malformed later. The recorded bit is the rule, so the leg
+    ///         reverts instead of silently measuring a rebasing position in
+    ///         balance terms.
+    function test_TokenThatChangesItsAnswerAfterCreationIsRefused() public {
+        HostileRebasingToken h = new HostileRebasingToken();
+        h.setMultiplier(MULT);
+        address owner5 = address(0xFEED);
+        h.mintShares(owner5, TARGET + 5e18);
+        h.mintShares(address(router), 100e18);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(h);
+        uint16[] memory w = new uint16[](1);
+        w[0] = 10_000;
+        uint256[] memory t = new uint256[](1);
+        t[0] = TARGET;
+
+        vm.startPrank(owner5);
+        h.approve(address(vectra), type(uint256).max);
+        uint256 id5 = vectra.createMandate(VectraMandate.MandateParams({
+            tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: 500e6,
+            expiry: uint64(block.timestamp + 30 days), agent: agent
+        }));
+        vm.stopPrank();
+
+        // It answered in shares at creation; now it answers with padded garbage.
+        h.setSharesMode(1);
+
+        bytes memory cd = abi.encodeCall(
+            MockRouter.swap, (address(h), address(usdc), 1e18, 10e6)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.BadShareReport.selector);
+        vectra.execute(id5, address(h), address(usdc), 1e18, 10e6 - 10, cd, _none());
+
+        // And the view refuses too, rather than reporting a wrong-unit number.
+        vm.expectRevert(VectraMandate.BadShareReport.selector);
+        vectra.position(id5);
     }
 
     /// @notice A token with no sharesOf at all falls back cleanly.

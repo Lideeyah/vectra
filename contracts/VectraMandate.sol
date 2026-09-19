@@ -111,6 +111,11 @@ contract VectraMandate is ReentrancyGuard {
         address[] tokens;
         uint16[] weightsBps;      // recorded for the agent and the interface
         uint256[] targetShares;   // the enforceable target
+        /// @notice One bit per basket token, fixed at creation: does this token
+        ///         report in shares? The unit a token answers in is decided
+        ///         when the mandate is created, never inferred when the money
+        ///         moves, so a token cannot change its answer between the two.
+        bool[] reportsShares;
     }
 
     mapping(uint256 => Mandate) private _mandates;
@@ -155,6 +160,7 @@ contract VectraMandate is ReentrancyGuard {
     error InsufficientOutput();
     error ContractRetainedFunds();
     error Overshoot();
+    error BadShareReport();
 
     constructor(address router_, address spender_, address usdc_) {
         if (router_ == address(0) || spender_ == address(0) || usdc_ == address(0)) {
@@ -183,6 +189,14 @@ contract VectraMandate is ReentrancyGuard {
         m.targetShares = p.targetShares;
 
         m.version = 1;
+
+        // Probe each token once. A malformed answer fails the probe and the
+        // mandate cannot be created with that token at all, which is what stops
+        // an owner-composed basket smuggling in a quantity the contract would
+        // misread at execution time.
+        for (uint256 i; i < p.tokens.length; ++i) {
+            m.reportsShares.push(_probeShares(p.tokens[i]));
+        }
 
         activeMandateOf[msg.sender] = id;
         emit MandateCreated(id, msg.sender, p.agent);
@@ -362,12 +376,12 @@ contract VectraMandate is ReentrancyGuard {
     {
         if (tokenIn == usdc) {
             uint256 idx = _indexOf(m, tokenOut);
-            if (_shares(tokenOut, m.owner) > m.targetShares[idx] + DUST_WEI) {
+            if (_sharesAt(m, idx, m.owner) > m.targetShares[idx] + DUST_WEI) {
                 revert Overshoot();
             }
         } else {
             uint256 idx = _indexOf(m, tokenIn);
-            if (_shares(tokenIn, m.owner) + DUST_WEI < m.targetShares[idx]) {
+            if (_sharesAt(m, idx, m.owner) + DUST_WEI < m.targetShares[idx]) {
                 revert Overshoot();
             }
         }
@@ -385,11 +399,11 @@ contract VectraMandate is ReentrancyGuard {
             uint256 idx = _indexOf(m, tokenOut);
             if (amountIn > m.maxLegUsdc) revert LegTooLarge();
             if (m.spentUsdc + amountIn > m.totalCapUsdc) revert CapExceeded();
-            if (_shares(tokenOut, m.owner) >= m.targetShares[idx]) revert WrongDirection();
+            if (_sharesAt(m, idx, m.owner) >= m.targetShares[idx]) revert WrongDirection();
         } else if (tokenOut == usdc) {
             // Selling a basket token back to USDC.
             uint256 idx = _indexOf(m, tokenIn);
-            if (_shares(tokenIn, m.owner) <= m.targetShares[idx]) revert WrongDirection();
+            if (_sharesAt(m, idx, m.owner) <= m.targetShares[idx]) revert WrongDirection();
         } else {
             // Token-to-token legs are not permitted: neither side is the
             // accounting unit, so neither cap nor direction is checkable.
@@ -398,22 +412,46 @@ contract VectraMandate is ReentrancyGuard {
     }
 
     /**
+     * @dev Probe, run once at creation. Returns whether the token reports in
+     *      shares. A clean revert means it does not implement sharesOf, which
+     *      is legitimate for a non-rebasing token. A malformed return — the
+     *      NVDAx proxy answers unknown selectors with padded data rather than
+     *      reverting — is refused outright rather than recorded either way.
+     */
+    function _probeShares(address token) private view returns (bool) {
+        (bool ok, bytes memory ret) = token.staticcall(
+            abi.encodeCall(IRebasingERC20.sharesOf, (address(this)))
+        );
+        if (!ok) return false;
+        if (ret.length != 32) revert BadShareReport();
+        return true;
+    }
+
+    /**
      * @dev Share balance, which is invariant under a rebase.
      *      Falls back to balanceOf only if sharesOf is absent — verified present
      *      on NVDAx, TSLAx, AAPLx and CRWDx, but a basket is owner-chosen and a
      *      non-rebasing token would not implement it.
      */
-    function _shares(address token, address account) private view returns (uint256) {
+    function _sharesAt(Mandate storage m, uint256 idx, address account)
+        private
+        view
+        returns (uint256)
+    {
+        address token = m.tokens[idx];
+        if (!m.reportsShares[idx]) {
+            // Recorded at creation as not implementing sharesOf. Balance and
+            // shares are the same quantity for such a token.
+            return IERC20(token).balanceOf(account);
+        }
         (bool ok, bytes memory ret) = token.staticcall(
             abi.encodeCall(IRebasingERC20.sharesOf, (account))
         );
-        // A correct uint256 return is exactly 32 bytes. Some proxies on this
-        // chain return padded data for unimplemented selectors instead of
-        // reverting, so length is checked rather than trusted.
-        if (ok && ret.length == 32) {
-            return abi.decode(ret, (uint256));
-        }
-        return IERC20(token).balanceOf(account);
+        // Recorded as share-reporting, so anything other than a well-formed
+        // uint256 is a token that changed its answer. Refuse rather than fall
+        // back, which would measure a rebasing position in the wrong unit.
+        if (!ok || ret.length != 32) revert BadShareReport();
+        return abi.decode(ret, (uint256));
     }
 
     function _indexOf(Mandate storage m, address token) private view returns (uint256) {
@@ -514,7 +552,7 @@ contract VectraMandate is ReentrancyGuard {
         targetShares = m.targetShares;
         currentShares = new uint256[](n);
         for (uint256 i; i < n; ++i) {
-            currentShares[i] = _shares(m.tokens[i], m.owner);
+            currentShares[i] = _sharesAt(m, i, m.owner);
         }
     }
 
