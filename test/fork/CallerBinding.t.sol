@@ -63,6 +63,19 @@ contract CallerBindingTest is Test {
         address to = vm.envOr("VECTRA_PAYLOAD_TO", ROUTER);
         assertEq(to, ROUTER, "payload targets an unexpected router");
 
+        // Align the fork's clock with the wall time the payload was issued at.
+        // A fork pinned to a past block has that block's timestamp, which can
+        // be behind the router's deadline, and an expiry revert would then be a
+        // property of the test rather than of the router.
+        uint256 fetchedAt = vm.envOr("VECTRA_FETCH_TIME", uint256(0));
+        if (fetchedAt > block.timestamp) {
+            console2.log("warping fork clock from", block.timestamp);
+            console2.log("                     to", fetchedAt);
+            vm.warp(fetchedAt);
+        } else {
+            console2.log("fork clock already at or ahead of fetch time", block.timestamp);
+        }
+
         deal(USDC, owner, 1_000e6);
 
         address[] memory tokens = new address[](1);

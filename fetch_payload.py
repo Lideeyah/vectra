@@ -12,6 +12,7 @@ Read-only. Requests a payload and prints it; signs nothing, sends nothing.
 import json
 import os
 import sys
+import time
 
 import okx_dex
 
@@ -61,6 +62,12 @@ def main():
     print(f"VECTRA_PAYLOAD_MINOUT={p['minReceiveAmount']}")
     print(f"VECTRA_PAYLOAD_AMOUNTIN={p['amountIn']}")
     print(f"VECTRA_PAYLOAD_TOKEN={p['token']}")
+    # Wall-clock time the payload was issued. A fork pinned to a past block
+    # carries that block's timestamp, which can sit behind the deadline the
+    # router just issued against wall time — so the test warps to this before
+    # forwarding. Without it, an expiry revert would be an artefact of the
+    # fork's clock rather than a property of the router.
+    print(f"VECTRA_FETCH_TIME={int(time.time())}")
 
     print(json.dumps({k: (v[:80] + "..." if k == "data" and v else v)
                       for k, v in p.items()}, indent=2), file=sys.stderr)
