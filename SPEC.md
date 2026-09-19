@@ -586,7 +586,17 @@ Two consequences.
 
 **"The agent never fires without a fresh quote from the current cycle" is enforced, not merely good practice.** A stale payload does not execute at a stale price; it does not execute at all. That removes a whole class of concern about replay and about a queued leg landing late.
 
-**The caller-binding question is not yet answered, and the deadline is what blocks it.** Whether a payload built for one address works when forwarded by another is still an inference from the `userWalletAddress` parameter, because expiry fires first and masks it. Answering it requires a *fresh* payload built for the contract's own address — which cannot be requested until the contract has an address.
+**The caller-binding question is ANSWERED, and the answer is yes.** A payload requested with `userWalletAddress` set to the predicted contract address, then forwarded by a contract deployed at that address, executes against the real router and delivers to the mandate owner:
+
+```
+address   0xd24424Cc482D68b19e82aa7A6411C48aeD22215B
+NVDAx delivered to the mandate owner   22528622203782763   (0.0225 NVDAx for $5)
+exit 0 (PASS)
+```
+
+Fetched and forwarded in one job seconds apart, against a fork of live X Layer at the current block, with the fork clock aligned to the payload's issue time. The contract's shape is therefore correct against the real router: the pull from the owner, the approval to the separate `spender`, the forward of verbatim calldata, the `minOut` check against real holdings, and the delivery to the owner all work end to end on real state.
+
+The `userWalletAddress` requirement is now a verified constraint rather than an inference from a parameter name: **the agent must request every payload with `userWalletAddress` set to the contract address.**
 
 **Answer it before deploying, not after.** A CREATE address is deterministic from the deployer and its nonce, so the contract's address is knowable before it exists. The deployer has **nonce 0** on X Layer, which puts the first deployment at:
 
