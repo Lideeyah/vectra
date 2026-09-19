@@ -219,9 +219,17 @@ Deploy and verify **in the same session**. Reconstructing compiler settings late
 | compiler | `0.8.24+commit.e11b9ed9` |
 | optimizer | enabled, 200 runs |
 | viaIR | false |
-| evm_version | **`paris`** — pinned, not inherited |
+| evm_version | **`cancun`** — pinned, not inherited |
 
-`evm_version` was previously unpinned and Foundry defaulted it to `cancun`. That is wrong twice over on this chain. X Layer is a zkEVM and may not implement Cancun opcodes; and an unpinned setting means a rebuild under a later Foundry produces *different bytecode* for an address that can never be redeployed. Pinning to `paris` avoids `PUSH0` and every Cancun opcode. Pinning it changed the runtime bytecode from 10,063 to 10,256 bytes, which is the evidence the setting actually took effect.
+`evm_version` was unpinned, so it tracked Foundry's default. That matters because a rebuild under a later Foundry would produce *different bytecode* for an address that can never be redeployed — the reproducibility argument, which holds whatever the chain supports.
+
+The **level** is `cancun`, and that was settled by evidence rather than caution, after an initial pin to `paris` turned out to be wrong.
+
+**X Layer supports Cancun, and a production deployment proves it.** Uniswap V4 is live on X Layer and the OKX router routes through it. V4's `PoolManager.unlock` uses transient storage — `TSTORE`/`TLOAD`, Cancun opcodes. Under a `paris` pin the fork EVM deactivates them, so every V4 route reverts with `EvmError: NotActivated`, which the router wraps and re-reports as `adaptor call failed`.
+
+That is how the mistake was found: a caller-binding run failed with a router error that looked like a routing or payload problem, and the `-vvvv` trace showed `NotActivated` beneath it. The conservative pin had made the test environment unable to execute the very routes the product depends on, and it disguised itself as a fault in the thing being tested.
+
+Two lessons worth keeping. **Conservative is not the same as safe** — a restriction adopted "just in case" broke a real path and cost several cycles to diagnose. And an earlier attempt to answer this question by scanning live bytecode for opcode bytes was recorded as UNVERIFIABLE, correctly: it could not distinguish an opcode from PUSH data. The answer came instead from watching a real V4 route fail under a restricted EVM, which is a much stronger form of evidence than counting bytes.
 
 > **STALE — DO NOT DEPLOY AGAINST THIS.** The hash below was captured mid-audit and `maxLegBpsOfTarget` has changed the contract since. Regenerate it **after the final contract change**, as the last step before deployment, and replace this block. A hash that was true an hour ago is worse than no hash, because it looks like a check.
 >

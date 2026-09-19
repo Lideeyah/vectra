@@ -5,11 +5,21 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
-# Pinned, not inherited. Foundry's default tracks the newest EVM version, so an
-# unpinned build can emit opcodes a zkEVM may not implement, and a rebuild under
-# a later Foundry would produce different bytecode against an immutable address
-# that can no longer be redeployed. Paris avoids PUSH0 and every Cancun opcode.
-evm_version = "paris"
+# Pinned, not inherited: an unpinned setting tracks Foundry's default, so a
+# rebuild under a later version produces different bytecode for an address that
+# can never be redeployed. The reproducibility argument is why it is pinned.
+#
+# The LEVEL is cancun, not paris, and that is now settled by evidence rather
+# than caution. Uniswap V4 is deployed on X Layer and the OKX router routes
+# through it; V4's PoolManager.unlock uses transient storage, a Cancun opcode.
+# Under a paris pin the fork EVM deactivates TSTORE/TLOAD and every V4 route
+# reverts with EvmError: NotActivated — which is what a caller-binding run
+# surfaced, masquerading as "adaptor call failed" from the router.
+#
+# So X Layer supports Cancun: a production V4 deployment proves it far better
+# than a bytecode scan could. Paris was over-conservative and made the test
+# environment unable to execute the very routes the product depends on.
+evm_version = "cancun"
 via_ir = false
 # Fork tests need --fork-url xlayer and are excluded from the default run.
 # Glob, not a regex. Fork suites need --fork-url and live in their own
