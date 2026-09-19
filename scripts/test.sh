@@ -55,4 +55,5 @@ if [[ "${1:-}" == "--fork" ]]; then
 fi
 
 echo "=== python selection tests"
-python3 test_agent_selection.py | tail -1
+run "agent selection" python3 test_agent_selection.py
+run "distance series " python3 test_distance_series.py

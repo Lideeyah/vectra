@@ -214,3 +214,57 @@ export async function loadHistory(): Promise<History | null> {
     true,
   );
 }
+
+/**
+ * The distance series: one row per agent cycle, appended and never rewritten.
+ *
+ * `distance_bps` is NA whenever any position could not be priced. Those rows
+ * are kept rather than dropped, because a cycle the agent could not measure is
+ * a fact about the agent, and a chart that silently omits them would show a
+ * clean line through the exact periods when nothing was known.
+ */
+export type DistanceRow = {
+  ts: string;
+  status: "priced" | "partial" | "no_price";
+  distanceBps: number | null;
+  totalUsd: number;
+  priced: number;
+  positions: number;
+  legDirection: string;
+  legSymbol: string;
+  legUsd: number | null;
+  distanceAfter: number | null;
+};
+
+export async function loadDistance(limit = 600): Promise<DistanceRow[]> {
+  try {
+    const r = await fetch(`${DATA_BASE}/agent/distance.csv`, { cache: "no-store" });
+    if (!r.ok) return [];
+    const lines = (await r.text()).trim().split("\n");
+    if (lines.length < 2) return [];
+    const head = lines[0].split(",");
+    const at = (c: string[], k: string) => c[head.indexOf(k)] ?? "";
+    const num = (v: string) => (v === "" || v === "NA" ? null : Number(v));
+
+    return lines
+      .slice(Math.max(1, lines.length - limit))
+      .map((l) => {
+        const c = l.split(",");
+        return {
+          ts: at(c, "ts_utc"),
+          status: at(c, "status") as DistanceRow["status"],
+          distanceBps: num(at(c, "distance_bps")),
+          totalUsd: Number(at(c, "total_usd")) || 0,
+          priced: Number(at(c, "priced")) || 0,
+          positions: Number(at(c, "positions")) || 0,
+          legDirection: at(c, "leg_direction"),
+          legSymbol: at(c, "leg_symbol"),
+          legUsd: num(at(c, "leg_usd")),
+          distanceAfter: num(at(c, "distance_after")),
+        };
+      })
+      .filter((r) => r.ts);
+  } catch {
+    return [];
+  }
+}

@@ -34,7 +34,9 @@ SPENDER = "0x8b773D83bc66Be128c60e07E17C8901f7a64F000"
 
 CONTRACT = os.environ.get("VECTRA_CONTRACT", "")
 MANDATE_FILE = Path("data/agent/mandate.json")
-LOG_DIR = Path("data/agent")
+# Overridable so a cycle can be run against a scratch directory without
+# writing into the committed record, which is append-only and real.
+LOG_DIR = Path(os.environ.get("VECTRA_LOG_DIR", "data/agent"))
 
 PRICE_NOTIONAL_USD = 5.0     # size at which positions are valued
 SLIPPAGE_PERCENT = "0.5"
@@ -390,6 +392,61 @@ def build_payload(leg):
             "routes": okx_dex.routes_of(d)}, None
 
 
+def total_distance(state):
+    """Total distance from target for the WHOLE basket, or None.
+
+    None when any position could not be priced. A distance computed from the
+    half of the basket that happened to quote is not a smaller distance, it is
+    a different measurement wearing the same name — and on a chart it would
+    read as convergence. The recorder makes the same choice with NA.
+    """
+    ps = state["positions"]
+    if not ps or any(p["valueUsd"] is None for p in ps):
+        return None
+    values = [p["valueUsd"] for p in ps]
+    targets = [p["targetWeightBps"] for p in ps]
+    return round(distance_bps(values, state["totalUsd"], targets), 2)
+
+
+DISTANCE_CSV = LOG_DIR / "distance.csv"
+DISTANCE_HEADER = ("ts_utc,status,distance_bps,total_usd,priced,positions,"
+                   "leg_direction,leg_symbol,leg_usd,distance_after\n")
+
+
+def append_distance(started, state, leg, dist):
+    """One row per cycle, appended, never rewritten.
+
+    The archives are timestamped files and raw file hosting serves no directory
+    listing, so a browser cannot walk them. This is the only shape the series
+    can take that a page can actually read — and like the price record, it
+    cannot be backfilled: a cycle that was not recorded when it happened is
+    gone.
+    """
+    ps = state["positions"]
+    priced = sum(1 for p in ps if p["valueUsd"] is not None)
+    status = ("priced" if dist is not None
+              else "partial" if priced else "no_price")
+    row = ",".join(str(x) for x in [
+        started.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        status,
+        "NA" if dist is None else dist,
+        round(state["totalUsd"], 2),
+        priced,
+        len(ps),
+        leg["direction"] if leg else "",
+        leg["symbol"] if leg else "",
+        f"{leg['amountUsd']:.2f}" if leg else "",
+        leg["distanceAfter"] if leg else "",
+    ]) + "\n"
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    if not DISTANCE_CSV.exists():
+        DISTANCE_CSV.write_text(DISTANCE_HEADER)
+    with DISTANCE_CSV.open("a") as fh:
+        fh.write(row)
+    return row.strip()
+
+
 def main():
     m = load_mandate()
     started = now()
@@ -464,7 +521,12 @@ def main():
     # stopped agent from a stable position.
     (LOG_DIR / "latest.json").write_text(payload_json)
 
-    print(f"\nlogged {out} and data/agent/latest.json")
+    dist = total_distance(state)
+    print("\ndistance " + ("NA (not every position priced)" if dist is None
+                            else f"{dist}bps"))
+    print("series += " + append_distance(started, state, leg, dist))
+
+    print(f"\nlogged {out} and {LOG_DIR / 'latest.json'}")
     return 0
 
 

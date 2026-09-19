@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { Convergence, type Row } from "@/components/Convergence";
 import { ConvergenceShape } from "@/components/ConvergenceShape";
 import { Create } from "@/components/Create";
+import { Distance } from "@/components/Distance";
 import { Controls } from "@/components/Controls";
 import { Legs } from "@/components/Legs";
 import { Proof } from "@/components/Proof";
@@ -182,6 +183,8 @@ export default function Page() {
           />
         </>
       )}
+
+      <Distance toleranceBps={phase.k === "ready" ? phase.m.driftBps : undefined} />
 
       <Legs />
 
