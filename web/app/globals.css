@@ -1,0 +1,102 @@
+/* Design system, DESIGN.md. Five colours, each with one job. No sixth colour. */
+:root {
+  --ground: #0e1620;
+  --bone: #e8e4da;
+  --bone-60: rgba(232, 228, 218, 0.6);
+  --bone-30: rgba(232, 228, 218, 0.3);
+  --bone-12: rgba(232, 228, 218, 0.12);
+  --bone-06: rgba(232, 228, 218, 0.06);
+  --cyan: #00d4c4;   /* agency: actual position, live state, anything actionable */
+  --orange: #e4572e; /* out of tolerance: normal, expected, working */
+  --red: #ff3b30;    /* failure: the product is not doing what you believe */
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+
+  --grid: 8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--bone);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A measurement grid at 5%: visible rather than implied, and everything aligns. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--bone-06) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bone-06) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+main { position: relative; z-index: 1; }
+
+/* Zero radius everywhere. Instruments do not have rounded corners. */
+button, input, select, div, section, article { border-radius: 0; }
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.dim { color: var(--bone-60); }
+.faint { color: var(--bone-30); }
+.cyan { color: var(--cyan); }
+.orange { color: var(--orange); }
+.red { color: var(--red); }
+
+.rule { height: 1px; background: var(--bone-12); border: 0; margin: 0; }
+
+/* Buttons, DESIGN.md section 3. */
+.btn {
+  font-family: var(--sans);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bone);
+  cursor: pointer;
+  transition: opacity 120ms linear;
+}
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-primary { background: var(--cyan); color: var(--ground); font-weight: 600; }
+.btn-secondary { border-color: var(--cyan); color: var(--cyan); }
+.btn-tertiary { color: var(--bone-60); padding-left: 0; padding-right: 0; }
+.btn-destructive { border-color: var(--orange); color: var(--orange); }
+
+/* Dimension lines and tick marks — engineering drawing, DESIGN.md section 4. */
+.tick { width: 1px; background: var(--bone-30); }
+.dimension { border-left: 1px solid var(--bone-30); padding-left: 12px; }
+
+/* Convergence: target is hairline outline, actual is solid fill. */
+.bar-track {
+  position: relative;
+  height: 10px;
+  border: 1px solid var(--bone-30);  /* target: outline */
+  background: transparent;
+}
+.bar-fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: var(--cyan);            /* actual: fill */
+  transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1); /* convergence */
+}
+.bar-fill.over { background: var(--orange); }
+
+a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid var(--bone-12); }
+a:hover { border-bottom-color: var(--cyan); }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+@media (max-width: 720px) {
+  .wrap { padding: 0 16px; }
+  body::before { background-size: 40px 40px; }
+}

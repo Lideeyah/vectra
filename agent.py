@@ -443,7 +443,7 @@ def main():
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     out = LOG_DIR / f"cycle_{started:%Y%m%dT%H%M%S}Z.json"
-    out.write_text(json.dumps({
+    payload_json = json.dumps({
         "ts": started.isoformat(timespec="seconds"),
         "mode": "execute" if EXECUTE else "dry-run",
         "owner": m["owner"], "contract": CONTRACT or None,
@@ -452,8 +452,19 @@ def main():
         "leg": leg, "noActionReason": why_not,
         "payload": payload, "payloadError": payload_err,
         "refusals": state["refusals"],
-    }, indent=2) + "\n")
-    print(f"\nlogged {out}")
+    }, indent=2) + "\n"
+
+    out.write_text(payload_json)
+
+    # Also written to a STABLE path. The timestamped file is the archive; this
+    # is what a browser can actually fetch, because raw file hosting serves
+    # files and not directory listings, so a timestamped name is unreachable
+    # without an index. The interface's next-move panel and refusal log both
+    # depend on this, and its `ts` field is what lets the interface tell a
+    # stopped agent from a stable position.
+    (LOG_DIR / "latest.json").write_text(payload_json)
+
+    print(f"\nlogged {out} and data/agent/latest.json")
     return 0
 
 

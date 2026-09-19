@@ -1,0 +1,71 @@
+{
+  "ts": "2026-09-19T14:29:27+00:00",
+  "mode": "dry-run",
+  "owner": "0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5",
+  "contract": null,
+  "totalUsd": 0.0,
+  "usdcValueUsd": 0.0,
+  "positions": [
+    {
+      "symbol": "NVDAx",
+      "address": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "decimals": 18,
+      "balance": 2681352785537461662062,
+      "shares": 2676799023601392965722,
+      "multiplier": 1.001701196801074,
+      "priceUsd": null,
+      "valueUsd": null,
+      "targetWeightBps": 3400,
+      "actualWeightBps": 0,
+      "driftBps": -3400
+    },
+    {
+      "symbol": "TSLAx",
+      "address": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "decimals": 18,
+      "balance": 0,
+      "shares": 0,
+      "multiplier": 1.0,
+      "priceUsd": null,
+      "valueUsd": null,
+      "targetWeightBps": 3300,
+      "actualWeightBps": 0,
+      "driftBps": -3300
+    },
+    {
+      "symbol": "AAPLx",
+      "address": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "decimals": 18,
+      "balance": 0,
+      "shares": 0,
+      "multiplier": 1.0032690125398187,
+      "priceUsd": null,
+      "valueUsd": null,
+      "targetWeightBps": 3300,
+      "actualWeightBps": 0,
+      "driftBps": -3300
+    }
+  ],
+  "leg": null,
+  "noActionReason": "no position has a usable price this cycle",
+  "payload": null,
+  "payloadError": null,
+  "refusals": [
+    {
+      "token": "NVDAx",
+      "reason": "quote failed: dex code=None URLError(ConnectionRefusedError(61, 'Connection refused')); dex code=None URLError(ConnectionRefusedError(61, 'Connection refused'))"
+    },
+    {
+      "token": "TSLAx",
+      "reason": "quote failed: dex code=None URLError(ConnectionRefusedError(61, 'Connection refused')); dex code=None URLError(ConnectionRefusedError(61, 'Connection refused'))"
+    },
+    {
+      "token": "AAPLx",
+      "reason": "quote failed: dex code=None URLError(ConnectionRefusedError(61, 'Connection refused')); dex code=None URLError(ConnectionRefusedError(61, 'Connection refused'))"
+    },
+    {
+      "token": "*",
+      "reason": "multiplier activation windows unavailable \u2014 cannot honour the issuer's pause requirement (SPEC 14, open item)"
+    }
+  ]
+}
