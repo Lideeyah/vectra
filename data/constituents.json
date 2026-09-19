@@ -1,5 +1,5 @@
 {
-  "fixedAt": "2026-09-17T11:56:25+00:00",
+  "fixedAt": "2026-09-19T10:33:36+00:00",
   "chain": "196",
   "probeNotionalUsd": 5.0,
   "selectionBasis": "lowest observed price impact on a live $5 USDC quote; NVDAx pinned",

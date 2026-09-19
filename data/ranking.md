@@ -3,8 +3,8 @@
 Universe: 640 xStocks. Probed: 640.
 
 - **46** quotable at $5
-- **0** returned no route (a liquidity finding)
-- **594** were refused by the API (rate limit or transport — **not** a liquidity finding, retried on re-run)
+- **594** returned no route (a liquidity finding)
+- **0** were refused by the API (rate limit or transport — **not** a liquidity finding, retried on re-run)
 
 Depth is the percentage the rate degrades between a $1 and a $50 quote. Lower is deeper.
 
