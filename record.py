@@ -13,6 +13,7 @@ minutes. A late or overlapping run therefore cannot write a duplicate reading.
 
 import csv
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,7 @@ NA = "NA"
 CADENCE_MIN = 5
 NOTIONAL_USD = 5.0
 RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "330"))
+COMMIT_EVERY = int(os.environ.get("VECTRA_COMMIT_EVERY", "6"))  # buckets, ~30 min
 THROTTLE_S = 1.1
 
 CONSTITUENTS = Path("data/constituents.json")
@@ -142,6 +144,36 @@ def quote_row(cyc, bucket, usdc, asset):
     return row
 
 
+def flush_commit(label):
+    """Commit and push what has been recorded so far.
+
+    A long job that dies late must not lose everything it gathered. The series
+    cannot be backfilled, so progress is made durable during the run rather than
+    only at the end. Failures here are logged and ignored: losing a push is
+    recoverable, crashing the recorder is not.
+    """
+    if os.environ.get("VECTRA_AUTOCOMMIT") != "1":
+        return
+    try:
+        if not subprocess.run(["git", "status", "--porcelain", "data"],
+                              capture_output=True, text=True).stdout.strip():
+            return
+        subprocess.run(["git", "config", "user.name", "Lydia Solomon"], check=True)
+        subprocess.run(["git", "config", "user.email", "lydiasolomon137@gmail.com"],
+                       check=True)
+        subprocess.run(["git", "add", "data"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", f"record: {label}"], check=True)
+        for attempt in range(3):
+            if subprocess.run(["git", "push", "-q"]).returncode == 0:
+                print(f"    pushed {label}")
+                return
+            subprocess.run(["git", "pull", "--rebase", "-q", "--autostash"])
+            time.sleep(3 * (attempt + 1))
+        print(f"    push failed for {label}; will retry next flush", file=sys.stderr)
+    except Exception as e:
+        print(f"    flush error (ignored): {e!r}", file=sys.stderr)
+
+
 def record_bucket(cyc, usdc, assets):
     """One bucket. Returns (written, ok_count)."""
     bucket = bucket_of(now())
@@ -198,6 +230,9 @@ def main():
         total_ok += ok
         cycles += 1
 
+        if cycles % COMMIT_EVERY == 0:
+            flush_commit(bucket_of(now()))
+
         # Sleep to the start of the next bucket, not a fixed interval, so
         # readings stay aligned to the cadence even when a cycle runs long.
         nxt = (now() + timedelta(minutes=CADENCE_MIN)).replace(second=0, microsecond=0)
@@ -208,6 +243,7 @@ def main():
         if wait > 0:
             time.sleep(wait)
 
+    flush_commit(bucket_of(now()))
     print(f"\n{cycles} cycles, {total_rows} rows, {total_ok} quotes recorded")
     return 0 if total_ok > 0 else 2
 

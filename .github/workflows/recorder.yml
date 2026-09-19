@@ -48,6 +48,9 @@ jobs:
           OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
           OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          # Commit every ~30 minutes during the run. A 5.5 hour job that dies
+          # late must not lose everything it gathered.
+          VECTRA_AUTOCOMMIT: "1"
         run: python record.py
 
       - name: Commit and push
