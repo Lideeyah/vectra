@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tokens:
-        description: "SYM=address pairs, comma separated. Blank = MSTRx + SPYx control."
+        description: "SYM=address pairs, comma separated. Blank = the whole recording set."
         required: false
         default: ""
 
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   curve:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
