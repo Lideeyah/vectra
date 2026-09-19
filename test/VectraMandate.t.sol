@@ -268,6 +268,88 @@ contract VectraMandateTest is Test {
         assertEq(wrapper.balanceOf(owner), 0);
     }
 
+    // ------------------------------------------------- oscillation / churn
+
+    /// @notice The cap tracks cumulative USDC spent and a sell does not refund
+    ///         headroom, so buy-sell-buy would be unbounded activity under an
+    ///         untouched cap IF the direction rule permitted it. It does not:
+    ///         with no price movement, a token still above target cannot be
+    ///         bought. This asserts that rather than assuming it.
+    function test_SellThenImmediateRebuy_IsRefused() public {
+        // Sit above target so a sell is permitted.
+        nvda.mintShares(owner, TARGET_SHARES + 4e18);
+        usdc.mint(address(router), 100e6);
+
+        bytes memory sell = abi.encodeCall(
+            MockRouter.swap, (address(nvda), address(usdc), 1e18, 5e6)
+        );
+        vm.prank(agent);
+        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, sell, _none());
+
+        // Still above target after the sell, and no price has moved.
+        assertGt(nvda.sharesOf(owner), TARGET_SHARES, "should still be overweight");
+
+        bytes memory rebuy = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, 1e18)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.WrongDirection.selector);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, rebuy, _none());
+    }
+
+    /// @notice The gap that assertion exposed, now closed. The entry-side rule
+    ///         reads position BEFORE the leg, so it bounds direction but not
+    ///         distance. The post-state check bounds distance: a leg may move a
+    ///         position toward target but never past it. Target cannot be
+    ///         crossed, so a reversal can never be legitimised, and oscillation
+    ///         is prevented by the contract rather than by the agent behaving.
+    function test_OversizedSellIsRefused_TargetCannotBeCrossed() public {
+        nvda.mintShares(owner, TARGET_SHARES + 1e18);
+        usdc.mint(address(router), 100e6);
+
+        // Sell far more than the 1e18 excess: this would land below target.
+        bytes memory oversized = abi.encodeCall(
+            MockRouter.swap, (address(nvda), address(usdc), 5e18, 25e6)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.Overshoot.selector);
+        vectra.execute(mandateId, address(nvda), address(usdc), 5e18, 25e6,
+                       oversized, _none());
+
+        // The position is untouched, so it is still above target.
+        assertEq(nvda.sharesOf(owner), TARGET_SHARES + 1e18, "position moved");
+
+        // A correctly sized sell is still permitted and stays on the right side.
+        bytes memory sized = abi.encodeCall(
+            MockRouter.swap, (address(nvda), address(usdc), 5e17, 3e6)
+        );
+        vm.prank(agent);
+        vectra.execute(mandateId, address(nvda), address(usdc), 5e17, 3e6,
+                       sized, _none());
+        assertGe(nvda.sharesOf(owner), TARGET_SHARES, "crossed below target");
+
+        // And the rebuy remains refused, with no price having moved.
+        bytes memory rebuy = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, 1e18)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.WrongDirection.selector);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18,
+                       rebuy, _none());
+    }
+
+    /// @notice The buy side of the same bound: a leg must not carry a position
+    ///         above its target either.
+    function test_OversizedBuyIsRefused() public {
+        bytes memory oversized = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, TARGET_SHARES + 5e18)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.Overshoot.selector);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6,
+                       TARGET_SHARES + 5e18, oversized, _none());
+    }
+
     // ------------------------------------------------------- access and caps
 
     function test_OnlyAgentCanExecute() public {

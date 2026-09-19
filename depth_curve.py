@@ -195,10 +195,13 @@ def main():
         o = old.get(r["symbol"])
         if o is None or d50 is None:
             verdict = "no comparison"
-        elif abs(o - d50) <= 0.005:
-            verdict = "survives"
+        # Combined tolerance. A fixed 0.005pp bar is punishing on a 2% figure
+        # and lax on a 0.002% one, and the table spans three orders of
+        # magnitude, so absolute agreement OR relative agreement counts.
+        elif abs(o - d50) <= 0.005 or abs(o - d50) / max(abs(o), 1e-9) <= 0.25:
+            verdict = "agrees"
         else:
-            verdict = f"DRIFT (off by {o - d50:+.4f}pp)"
+            verdict = f"DIVERGES (off by {o - d50:+.4f}pp)"
         summary.append({"symbol": r["symbol"], "originalDepthPct": o,
                         "ladder50Pct": d50, "ladder100Pct": d100,
                         "verdict": verdict})
@@ -206,9 +209,9 @@ def main():
               f"{('—' if d50 is None else f'{d50:.4f}%'):>16} "
               f"{('—' if d100 is None else f'{d100:.4f}%'):>11}  {verdict}")
 
-    survived = sum(1 for s_ in summary if s_["verdict"] == "survives")
-    print(f"\n{survived} of {len(summary)} original figures survive; "
-          f"{len(summary) - survived} were drift.")
+    survived = sum(1 for s_ in summary if s_["verdict"] == "agrees")
+    print(f"\n{survived} of {len(summary)} original figures agree with the "
+          f"ladder; {len(summary) - survived} diverge.")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({

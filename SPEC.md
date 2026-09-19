@@ -50,6 +50,16 @@ Two things follow from this.
 
 **Baskets are indices, not arbitrary picks.** Tracking error is only meaningful against something being tracked, so the product ships with defined index baskets and the user chooses among them or composes one with stated weights that then become the target of record.
 
+**Constituent selection by measured depth is what makes the claim true for a given basket.** This is not a sensible default; it is load-bearing, and the ladder is what turned it from one into the other.
+
+Measured across the quotable set, the cost of a hundredfold size increase runs from **0.0008% on SPYx to 5.74% on NKEx** — four orders of magnitude, on the same chain, through the same aggregator, on the same day. The proportionality claim is true of the deep names and false of the thin ones. It is not a property of X Layer, or of xStocks, or of tokenised equities in general. It is a property of *particular assets*, and it has to be measured per asset to be relied on.
+
+The consequence is sharp. A basket assembled by name recognition — a plausible-looking ten of Nike, Coinbase, Rocket Lab and friends — could easily contain NKEx, and for the user holding it the central claim fails outright: rebalancing that position at $100 costs 5.74%, which is worse than the fee-driven drift bands the product exists to beat. The same product, composed two different ways, either proves its thesis or refutes it.
+
+So selection is not curation for taste or liquidity comfort. **It is the step that determines whether the product's central claim holds for the basket a user actually owns**, and it is why the recording set was fixed by observed price impact rather than by names anyone would recognise — even though the resulting fourteen happen to be recognisable, which is a consequence of the measurement rather than the reason for it.
+
+Nothing else in this ecosystem measures depth per asset and composes accordingly. Index products inherit their constituents from an index provider; DEX aggregators route a trade someone else chose. Choosing what to hold *because of what it costs to maintain* is the part that does not currently exist.
+
 **Rebasing becomes a feature rather than a hazard.** Balances change with no transfer, which means every change can be attributed: this position grew because the price moved, that one grew because a dividend was reinvested. No tokenised equity product performs that decomposition today, and it falls directly out of the chain's own mechanism.
 
 ---
@@ -94,6 +104,14 @@ The user grants an ERC-20 allowance to the contract for each token in the basket
 
 If the contract is completely broken, the worst case is bounded by the allowance one user granted. For the demo that is a few dollars. This single design choice is worth more than every other safety measure combined.
 
+**Exact zero is not reachable on a rebasing token, and the invariant is bounded accordingly.** `balanceOf` is derived by integer division from shares — `shares * multiplier / 1e18` — so transferring the full balance converts back to shares with a rounding-down step and can leave a wei behind. Asserting an exact zero therefore reverts on correct behaviour.
+
+The invariant is `balanceOf(contract) <= DUST_WEI` where `DUST_WEI` is 1000: roughly 1e-15 of an 18-decimal token, fractions of a nanocent. It is a **ceiling, not an allowance** — nothing in the contract may deliberately retain anything, and the bound exists solely to tolerate a rounding artifact that cannot be engineered away at the ERC-20 interface.
+
+This was found by a fork test against real NVDAx at multiplier 1.0017. The mock suite never caught it because the mock's multiplier is exactly 1e18 and does not round. Observed residual on a real under-consumed sell: **1 wei**. It would have surfaced on the first mainnet leg, on the buy side as readily as the sell side.
+
+The general lesson is recorded because it generalises: a model of a rebasing token with a unit multiplier is not a model of a rebasing token.
+
 ### 5.2 Contract surface
 
 `createMandate(address[] tokens, uint16[] weightsBps, uint16 driftBps, uint256 maxLegUsdc, uint256 totalCapUsdc, uint64 expiry, address agent)`
@@ -110,7 +128,8 @@ The contract therefore bounds the **size and direction** of trades, and leaves t
 - the caller is the named agent
 - `tokenIn` and `tokenOut` are both either USDC or members of the basket, and are not the same token
 - when spending USDC, `amountIn` is at or below `maxLegUsdc`, and cumulative USDC spend after this leg is at or below `totalCapUsdc`
-- **direction**: USDC may only be spent to buy a token whose current holding is below its target share of the basket, measured in the token's own units against the last recorded target, and a basket token may only be sold when its holding is above target
+- **direction**: USDC may only be spent to buy a token whose share balance is below its target, and a basket token may only be sold when its share balance is above target
+- **distance**: after the swap, the position must not have crossed its target — a buy may not leave shares above target, a sell may not leave them below. Checked in share terms, so no oracle is required
 
 The direction rule is what survives the absence of prices. It does not prove the leg is optimal, and a compromised agent retains freedom to choose a suboptimal but still corrective leg. What it forecloses is the unbounded case: the agent cannot churn the position back and forth, cannot buy what is already at or above target, and cannot spend beyond the cap. That is a weaker guarantee than "every action reduces distance from target", and the difference is stated here rather than glossed.
 
@@ -121,6 +140,24 @@ The direction rule is what survives the absence of prices. It does not prove the
 So the coarser guarantee is also the more durable one. That is worth stating as a design property, not apologising for.
 
 The honest limitation remains: a share quantity is a proxy for the value weights the product cares about, and it drifts from them as prices move. Re-targeting is an owner action, never an agent one.
+
+### 5.2.1 The cap under a two-directional agent
+
+**Decision: the cap tracks cumulative USDC *spent*, and a sell does not refund headroom.**
+
+The alternative — a net-position cap where selling returns headroom — was rejected. The cap exists to bound how much the owner can ever be committed to, not to bound how much the agent may trade. Those are different quantities, and it is the first the user is consenting to when they sign. "This agent may put at most fifty dollars of my money to work" is a sentence a user can hold in their head; "this agent may hold at most fifty dollars of exposure at any instant, replenishing as it sells" is not, and it silently permits unlimited lifetime turnover.
+
+Concretely: a $50 cap with $50 spent is exhausted. Selling $20 back to USDC does **not** restore $20 of buying power. The mandate is finished buying; it may still sell to converge, since selling commits no new capital.
+
+**The churn objection, and why it does not bite.** A cap that never decreases, combined with an agent that can sell, appears to permit unbounded activity: buy, sell, buy again, all under an untouched cap. It does not, because every leg must move a position *toward* target, and a buy immediately following a sell of the same token moves it away. This is asserted rather than assumed — `test_SellThenImmediateRebuy_IsRefused` sells a still-overweight position and confirms the rebuy reverts with `WrongDirection`.
+
+**The gap that assertion exposed, and its closure.** The entry-side direction rule tests the position *before* the leg, so it bounds which way a trade may go but not how far. A single oversized sell could therefore cross below target, and once below, a rebuy became legitimate. Oscillation would have been prevented only while the agent sized legs correctly.
+
+That was not acceptable. A check which holds only when the agent behaves correctly returns exactly the trust that putting the mandate on chain exists to remove, and the contract is immutable with no admin key, so deploying without the fix would have fixed the weaker guarantee for the life of the product.
+
+The contract therefore also checks **post-state**: after the swap, a buy may not leave shares above target and a sell may not leave them below. This needs no oracle because it is expressed in `sharesOf`, the quantity invariant under a rebase — the same insight the entry-side rule rests on, applied to the other end of the transaction. `DUST_WEI` of slack absorbs the share-conversion rounding described in 5.1.
+
+Target can no longer be crossed, so a reversal can never be legitimised, and oscillation is bounded by the contract rather than by the agent behaving. `test_OversizedSellIsRefused_TargetCannotBeCrossed` asserts the oversized sell reverts, that a correctly sized one still succeeds, and that the rebuy remains refused; `test_OversizedBuyIsRefused` covers the same bound on the buy side.
 
 **Every leg has USDC on one side.** Token-to-token legs are rejected. Beyond removing an unbounded-churn surface, this means cap accounting is always denominated in the unit the cap is written in. No conversion, no oracle, no ambiguity about what "spent" means.
 
@@ -265,9 +302,9 @@ Compose the basket: pick from available xStocks on X Layer, set weights, or take
 
 Set the mandate: drift tolerance, maximum single trade, total spend cap, expiry. Each has a sensible default and an explanation of what it bounds. The user should understand that these are limits on what the agent may do, not settings for how it behaves.
 
-Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total, never more than Y in one trade, only to buy tokens that are below their target weight and sell tokens above it, until this date, and you can stop it at any time."
+Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total, never more than Y in one trade, only to buy tokens below their target weight and sell tokens above it, until this date, and you can stop it at any time. Selling does not give it more to spend."
 
-Approve allowances. One transaction per token, or a single approval for USDC if the initial build is buy-only. Explain why each is needed.
+Approve allowances. The agent trades in both directions, so every basket token needs an allowance as well as USDC: a sell pulls the token, a buy pulls USDC. Explain why each is needed, and that each is capped by the mandate's spend limit.
 
 Create the mandate. One transaction.
 
@@ -291,9 +328,11 @@ Pause stops the agent immediately. Revoke ends the mandate permanently. Separate
 
 These must hold and must be tested.
 
-The contract's balance of every token is zero at the end of every transaction.
+USDC may only be spent to buy a basket token currently below its target share, and a basket token may only be sold when currently above it. *(The checkable form of "no leg makes things worse". The contract enforces direction, not optimality — see 5.2.)*
 
-USDC may only be spent to buy a basket token currently below its target share, and a basket token may only be sold when currently above it. *(This is the checkable form of "no leg makes things worse". The contract enforces direction, not optimality — see 5.2.)*
+No leg may carry a position past its target: after a buy, shares are at or below target; after a sell, at or above. Direction and distance are both bounded, so oscillation cannot be manufactured by oversizing a leg.
+
+The contract's balance of every token involved in a call is at most `DUST_WEI` at the end of it. Exact zero is unreachable on a rebasing token — see 5.1.
 
 Cumulative USDC spend never exceeds the mandate's cap.
 
@@ -439,6 +478,50 @@ Recorded as they are found, so the document does not quietly diverge from what i
 **The universe is much larger than assumed.** X Layer lists hundreds of xStocks. Section 9.1's "pick from available xStocks" is not a workable interface at that scale, and "choose ten by liquidity" is no longer an obvious selection rule. This strengthens section 2A's position that baskets should be defined indices, and that decision should be taken with the liquidity probe results in hand.
 
 **OKX's edge rejects default HTTP clients.** Requests carrying a library default user agent are refused by Cloudflare with error 1010 before reaching the API. Clients must send ordinary browser headers. If this escalates to TLS fingerprinting, the correct response is to adopt OKX's own SDK rather than push further against the edge.
+
+**The depth column measures slippage plus price drift, not slippage alone.** Each figure came from two quotes taken seconds apart, so any movement in the underlying between them lands in the result. On a quiet asset that contamination is negligible; on a volatile one it can exceed the slippage being measured. MSTRx's apparent **−0.0362%** — a better rate at $50 than at $1, which would have been a crack in the proportionality claim — did not reproduce. A single-pass size ladder shows it degrading monotonically like everything else, so the original figure was price drift on a volatile name, not market structure.
+
+**The size ladder replaces the depth column.** Every asset quoted in a single pass across $1, $5, $10, $25, $50, $100. Cost of a hundredfold size increase:
+
+| Asset | $1→$50 | $1→$100 | vs old figure |
+|---|---|---|---|
+| SPYx | 0.0004% | 0.0008% | agrees |
+| NVDAx | −0.0008% | 0.0002% | agrees |
+| QQQx | 0.0006% | 0.0012% | agrees |
+| AAPLx | 0.0017% | 0.0020% | agrees |
+| GOOGLx | 0.0018% | 0.0036% | agrees |
+| BRK.Bx | 0.0018% | 0.0036% | agrees |
+| TSLAx | 0.0021% | 0.0042% | agrees |
+| TSMx | 0.0031% | 0.0062% | agrees |
+| IWMx | 0.0031% | 0.0063% | agrees |
+| AVGOx | 0.0034% | 0.0068% | agrees |
+| HOODx | 0.0035% | 0.0070% | agrees |
+| ASMLx | 0.0036% | 0.0073% | agrees |
+| COINx | 0.0319% | 0.0362% | diverges |
+| MSTRx | 0.0247% | 0.0500% | diverges |
+| RKLBx | 0.2704% | 0.8662% | diverges |
+| IRENx | 2.1068% | 4.1671% | agrees |
+| NKEx | 4.2438% | 5.7359% | diverges — **worse**, not better |
+
+**13 of 17 agree with the old figures; 4 diverge.** Agreement is judged on absolute *or* relative tolerance, because the table spans three orders of magnitude and a fixed bar is punishing at one end and meaningless at the other.
+
+**The old method was unreliable, not useless.** Twelve constituents reproduce to within a fraction of a basis point. The failures cluster where they should: MSTRx and COINx are volatile, and price movement between two quotes seconds apart swamped a figure measured in thousandths of a percent.
+
+**The thin tail is real, and the prediction that it would vanish was wrong.** NKEx did not collapse — it got **worse**, 4.24% at $50 and 5.74% at $100 against an original 2.92%. IRENx reproduced almost exactly at 2.11%. Only RKLBx collapsed, from 1.93% to 0.27%. So the spread is not an artifact: it runs from **0.0008% on SPYx to 5.74% on NKEx at $100**, four orders of magnitude, measured in single passes.
+
+That makes the contrast stronger than the original claim, not weaker, and it is the honest version: the deep names are effectively free at any size, and the thin ones are not. The product's case does not require every xStock to be cheap. It requires the constituents to be, and all fourteen are — the worst of them, ASMLx, costs 0.0073% for a hundredfold size increase.
+
+**The route changes above $25 without improving the rate.** Both assets switch from `Uniswap V4` to `JIT Router` at $50 and $100, and the rate continues to degrade across the switch. Worth knowing for the agent's route sanity check: a route change is normal at size and is not by itself a signal.
+
+**A measurement that cannot separate its subject from its method.** Two findings in this build share a shape, and it is worth naming as a class rather than twice as incidents. The mock rebasing token used a multiplier of exactly 1e18, so it could not exhibit the share-conversion rounding it existed to model, and a real invariant violation stayed invisible until a fork test. The depth probe took its two quotes seconds apart, so it could not separate slippage from price movement, and reported the sum as though it were the former. In both cases the instrument produced clean, plausible, wrong numbers, and in neither case did anything about the output signal the problem. The guard is to ask what an instrument would produce if the effect being measured were absent — a unit multiplier, a motionless price — and check that the answer is distinguishable from a real reading.
+
+**The diagnosis was confirmed by where its own instrument failed.** The two-quote method was expected to break down when the signal is small and the asset moves, because price drift between the calls enters the result and a figure measured in thousandths of a percent has no margin to absorb it. That is exactly where it broke. Of seventeen assets, thirteen reproduce; the divergences are MSTRx and COINx — the two most volatile names in the set, whose true figures are in the hundredths of a percent — plus NKEx and RKLBx at the thin end, where a single pass is large enough to swamp the two-quote reading in the other direction.
+
+Twelve constituents reproduce to within a fraction of a basis point, so the instrument was not broken in general. It failed in precisely the conditions its failure mode predicts, and that pattern is stronger evidence for the diagnosis than the replacement numbers are on their own. A wrong measurement that fails unpredictably tells you only that it is wrong; one that fails where theory says it must tells you that you understand why.
+
+**The thin tail was graded, and it held.** NKEx, IRENx and RKLBx were selected as "the three worst" *by the flawed method*, so that ranking was itself an artifact of it, and the expectation recorded here beforehand was that they would collapse — in which case the conclusion would have been that the old method could not identify a tail at all, rather than that a tail was found and disproved.
+
+They did not collapse. NKEx got worse (5.74% at $100 against 2.92%), IRENx reproduced almost exactly (4.17%), and only RKLBx fell away (0.87%). The tail is real and the prediction was wrong. What remains unestablished is whether these are the *thinnest* assets, since the ranking that chose them is untrustworthy; a ladder across all 46 would settle that, and would likely find worse. The spread already measured is sufficient for the argument.
 
 **Depth is measured, not read from a field.** The aggregator returns `priceImpactPercentage` as null on this chain, so the original plan to rank constituents by reported price impact could not work. Depth is instead observed directly: quote the same token at one dollar and at fifty, and read how far the rate degrades between them. This is a better method than the one it replaces, not merely a workaround — it is a direct observation of what the book does under size, rather than a number the venue reports about itself, and it cannot be misreported. The same technique settled the price-unit question on Gapless.
 
