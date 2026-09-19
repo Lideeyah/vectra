@@ -41,6 +41,12 @@ jobs:
             sleep 2
           done
           echo "forked chain $(cast chain-id --rpc-url http://127.0.0.1:8545) at block $(cast block-number --rpc-url http://127.0.0.1:8545)"
+          # The block the fork starts at, which is where OUR history begins.
+          # Everything before it belongs to the remote provider, and X Layer
+          # caps eth_getLogs at a 100-block range — so a log query starting at
+          # block 0 is not merely slow, it is REFUSED upstream. That refusal is
+          # why the first successful leg exported zero events.
+          echo "FORK_BLOCK=$(cast block-number --rpc-url http://127.0.0.1:8545)" >> "$GITHUB_ENV"
 
       - name: Move real NVDAx to the owner, by impersonation
         run: |
@@ -69,6 +75,7 @@ jobs:
           echo "OWNER=$(grep -oE 'OWNER 0x[0-9a-fA-F]{40}' /tmp/seed.log | tail -1 | cut -d' ' -f2)" >> "$GITHUB_ENV"
 
       - name: Fetch a fresh payload and forward it, same job
+        id: leg
         env:
           OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
           OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
@@ -129,25 +136,47 @@ jobs:
             exit 0
           fi
 
-          SIG=$(cast sig-event "Executed(uint256,address,address,uint256,uint256,uint64)")
-          echo "Executed topic: $SIG"
-          cast logs "$SIG" --address "$VECTRA" --from-block 0 \
-            --rpc-url http://127.0.0.1:8545 --json > data/dev/executed.json || echo "[]" > data/dev/executed.json
+          # From the fork block, never from 0. See the anvil step: the upstream
+          # provider refuses ranges wider than 100 blocks, and the previous
+          # version piped that refusal into `|| echo "[]"`, so a hard error and
+          # a genuinely quiet run produced byte-identical output. Errors are
+          # kept and reported here instead of being converted into emptiness.
+          FROM="${FORK_BLOCK:-0}"
+          echo "querying logs for $VECTRA from block $FROM"
 
-          TSIG=$(cast sig-event "TargetsSet(uint256,uint256[],uint256[],uint64,uint256)")
-          cast logs "$TSIG" --address "$VECTRA" --from-block 0 \
-            --rpc-url http://127.0.0.1:8545 --json > data/dev/targets_set.json || echo "[]" > data/dev/targets_set.json
+          fetch() {   # fetch <event-signature> <outfile>
+            local out="data/dev/$2"
+            if cast logs "$(cast sig-event "$1")" --address "$VECTRA" \
+                 --from-block "$FROM" --rpc-url http://127.0.0.1:8545 --json \
+                 > "$out" 2> "/tmp/$2.err"; then
+              return 0
+            fi
+            echo "LOG QUERY FAILED for $1:"
+            cat "/tmp/$2.err"
+            { echo; echo "## log query failure ($1)"; echo '```';
+              cat "/tmp/$2.err"; echo '```'; } >> data/dev/run.md
+            echo "[]" > "$out"
+            return 1
+          }
 
-          python - <<'PY'
-          import json, pathlib
-          for name in ("executed", "targets_set"):
-              p = pathlib.Path(f"data/dev/{name}.json")
-              try:
-                  rows = json.loads(p.read_text() or "[]")
-              except json.JSONDecodeError:
-                  rows = []
-              print(f"{name}: {len(rows)} log(s)")
-          PY
+          rc=0
+          fetch "Executed(uint256,address,address,uint256,uint256,uint64)" executed.json || rc=1
+          fetch "TargetsSet(uint256,uint256[],uint256[],uint64,uint256)" targets_set.json || rc=1
+
+          python tools/decode_legs.py data/dev | tee /tmp/decoded.txt
+          { echo; echo "## decoded"; echo '```'; cat /tmp/decoded.txt; echo '```'; } >> data/dev/run.md
+
+          # The check that can fail. A leg step that reported success while the
+          # export produced no Executed log means one of the two is lying, and
+          # the whole point of this run is the event data — so an empty export
+          # after a successful leg is a failure, not a quiet pass.
+          LEGS=$(python -c "import json;print(len(json.load(open('data/dev/history.json'))['legs']))")
+          echo "legs decoded: $LEGS"
+          if [ "${{ steps.leg.outcome }}" = "success" ] && [ "$LEGS" -eq 0 ]; then
+            echo "::error::the leg step succeeded but exported zero Executed logs"
+            rc=1
+          fi
+          exit $rc
 
       - name: Commit the development event data
         if: always()
