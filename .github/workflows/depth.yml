@@ -1,0 +1,55 @@
+name: depth curve
+
+# Read-only. Quotes one or more tokens across a size ladder to distinguish a
+# routing artifact from a real small-size penalty. Nothing is signed or sent.
+on:
+  workflow_dispatch:
+    inputs:
+      tokens:
+        description: "SYM=address pairs, comma separated. Blank = MSTRx + SPYx control."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  # Its own group. A dispatch outranks a schedule, so sharing the recorder's
+  # group would cancel it mid-run.
+  group: depth-curve
+  cancel-in-progress: false
+
+jobs:
+  curve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Quote the ladder
+        continue-on-error: true
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          VECTRA_TOKENS: ${{ inputs.tokens }}
+        run: python depth_curve.py
+
+      - name: Commit
+        if: always()
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+          [ -z "$(git status --porcelain data)" ] && echo "nothing new" && exit 0
+          git add data
+          git commit -m "depth: size ladder $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+          exit 1
