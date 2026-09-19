@@ -219,21 +219,47 @@ Deploy and verify **in the same session**. Reconstructing compiler settings late
 | compiler | `0.8.24+commit.e11b9ed9` |
 | optimizer | enabled, 200 runs |
 | viaIR | false |
-| evm_version | **`cancun`** — pinned, not inherited |
+| evm_version | **`paris`** — pinned, not inherited (deployment build) |
 
-`evm_version` was unpinned, so it tracked Foundry's default. That matters because a rebuild under a later Foundry would produce *different bytecode* for an address that can never be redeployed — the reproducibility argument, which holds whatever the chain supports.
+`evm_version` was unpinned, so it tracked Foundry's default. That matters because a rebuild under a later Foundry would produce *different bytecode* for an address that can never be redeployed.
 
-The **level** is `cancun`, and that was settled by evidence rather than caution, after an initial pin to `paris` turned out to be wrong.
+**The pin is a reproducibility choice, not a compatibility one. X Layer implements Cancun.** That is established by evidence, not caution: Uniswap V4 is deployed on X Layer, the OKX router routes production trades through it, and V4's `PoolManager.unlock` cannot function without transient storage. A live V4 deployment carrying real volume is far stronger evidence than the bytecode scan attempted earlier, which was correctly recorded as UNVERIFIABLE because it could not distinguish an opcode from PUSH data. **Nothing here should be read as the chain being unable to handle Cancun.**
 
-**X Layer supports Cancun, and a production deployment proves it.** Uniswap V4 is live on X Layer and the OKX router routes through it. V4's `PoolManager.unlock` uses transient storage — `TSTORE`/`TLOAD`, Cancun opcodes. Under a `paris` pin the fork EVM deactivates them, so every V4 route reverts with `EvmError: NotActivated`, which the router wraps and re-reports as `adaptor call failed`.
+How that was discovered is worth keeping: an initial pin to `paris` made every V4 route revert with `EvmError: NotActivated`, which the OKX router caught and re-reported as its own `adaptor call failed`. The cause surfaced two layers below the symptom, and only a `-vvvv` trace separated them.
 
-That is how the mistake was found: a caller-binding run failed with a router error that looked like a routing or payload problem, and the `-vvvv` trace showed `NotActivated` beneath it. The conservative pin had made the test environment unable to execute the very routes the product depends on, and it disguised itself as a fault in the thing being tested.
+**Two profiles, because the two concerns are different.**
 
-Two lessons worth keeping. **Conservative is not the same as safe** — a restriction adopted "just in case" broke a real path and cost several cycles to diagnose. And an earlier attempt to answer this question by scanning live bytecode for opcode bytes was recorded as UNVERIFIABLE, correctly: it could not distinguish an opcode from PUSH data. The answer came instead from watching a real V4 route fail under a restricted EVM, which is a much stronger form of evidence than counting bytes.
+| Profile | evm_version | Purpose |
+|---|---|---|
+| `default` | `paris` | The deployment build. What the recorded hash describes, what gets deployed and verified. |
+| `fork` | `cancun` | Fork tests only. The forked chain runs V4, so the test EVM must too. |
 
-> **STALE — DO NOT DEPLOY AGAINST THIS.** The hash below was captured mid-audit and `maxLegBpsOfTarget` has changed the contract since. Regenerate it **after the final contract change**, as the last step before deployment, and replace this block. A hash that was true an hour ago is worse than no hash, because it looks like a check.
->
-> Regenerate with: `rm -rf out cache && forge build` then keccak the runtime object from `out/VectraMandate.sol/VectraMandate.json`.
+Fork suites run under `FOUNDRY_PROFILE=fork` and are matched to `test/fork/`. Neither suite can be run under the wrong profile by accident, because `scripts/test.sh` selects it.
+
+**The split is asserted from both sides**, since a profile that silently did nothing would look identical to one that worked. `test/fork/EvmProfile.t.sol` etches raw `TSTORE`/`TLOAD` runtime code and calls it — raw bytecode rather than Solidity, because solc refuses to *compile* `tstore` under `paris`, which would break the deployment build instead of testing it:
+
+```
+default profile (paris) : call fails, value 0    -> TSTORE inactive
+fork profile   (cancun) : call succeeds, value 42 -> TSTORE active
+```
+
+**The honest gap this creates.** The contract exercised in fork tests is compiled under Cancun and is therefore **not byte-identical** to the artifact that will be deployed:
+
+```
+paris  10,642 bytes   keccak 0x8cc77700...
+cancun 10,436 bytes   keccak 0x9e59bf8c...
+identical: False      delta: -206 bytes
+```
+
+Is the difference semantically neutral? The evidence, rather than an assertion:
+
+- **The full 61-test suite passes identically under both profiles.** Every behavioural property the contract claims — direction, distance, rate, cap accounting, settlement, dust bounds, rebase handling, access control — holds under each compilation.
+- **The contract contains no transient storage, no `MCOPY` written by hand, and no opcode-version-dependent logic.** The 206-byte difference is the optimiser using Cancun memory instructions for copies solc would otherwise open-code.
+- The difference is in *how memory is moved*, not in *what the contract decides*.
+
+**What that evidence does not cover.** It is bounded by the suite: behaviour no test exercises is not compared. A property that exists in the Paris build but is only exercised by a fork test has been verified solely on the Cancun build. The mitigation is that the fork tests check *interaction with external contracts* — routing, settlement, real token reads — rather than internal logic, and internal logic is covered by the default-profile suite on the deployment build.
+
+If byte-identical assurance were required, the fork tests would have to run under `paris`, which is impossible while the chain being forked runs V4. That is a genuine trade, taken deliberately and recorded rather than resolved.
 
 **Reproducibility, verified rather than assumed.** Pinning the EVM version removes one source of drift; the claim that actually matters is that a clean rebuild produces identical bytecode, and that is testable. Artifacts were wiped entirely and the contract rebuilt from the pinned settings:
 

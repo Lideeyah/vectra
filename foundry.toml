@@ -5,30 +5,39 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
+# THE DEPLOYMENT BUILD. This is the profile the recorded bytecode hash in
+# SPEC 5.2.4 describes, and the one that will be deployed and verified.
+#
 # Pinned, not inherited: an unpinned setting tracks Foundry's default, so a
 # rebuild under a later version produces different bytecode for an address that
-# can never be redeployed. The reproducibility argument is why it is pinned.
-#
-# The LEVEL is cancun, not paris, and that is now settled by evidence rather
-# than caution. Uniswap V4 is deployed on X Layer and the OKX router routes
-# through it; V4's PoolManager.unlock uses transient storage, a Cancun opcode.
-# Under a paris pin the fork EVM deactivates TSTORE/TLOAD and every V4 route
-# reverts with EvmError: NotActivated — which is what a caller-binding run
-# surfaced, masquerading as "adaptor call failed" from the router.
-#
-# So X Layer supports Cancun: a production V4 deployment proves it far better
-# than a bytecode scan could. Paris was over-conservative and made the test
-# environment unable to execute the very routes the product depends on.
-evm_version = "cancun"
+# can never be redeployed. The pin exists for REPRODUCIBILITY, not because the
+# chain cannot handle Cancun — it demonstrably can, see SPEC 5.2.4.
+evm_version = "paris"
 via_ir = false
-# Fork tests need --fork-url xlayer and are excluded from the default run.
-# Glob, not a regex. Fork suites need --fork-url and live in their own
-# directory so the exclusion cannot silently fail to match.
+# Glob, not a regex. Fork suites live in their own directory so the exclusion
+# cannot silently fail to match.
 no_match_path = "test/fork/*"
 fs_permissions = [{ access = "read", path = "./data" }]
+
+# THE FORK-TEST ENVIRONMENT. Inherits everything above and raises only the EVM
+# version, because the chain being forked runs Cancun: Uniswap V4's
+# PoolManager.unlock uses transient storage, and under a paris EVM every V4
+# route reverts with EvmError: NotActivated, which the OKX router re-reports as
+# its own "adaptor call failed".
+#
+# This profile exists so the two concerns stop fighting: the deployment build
+# stays reproducible at paris, and fork tests can execute the real routes the
+# product depends on.
+[profile.fork]
+evm_version = "cancun"
+# NOTE: no_match_path cannot be cleared from a profile — an empty string here is
+# ignored and the inherited glob still applies. The runner clears it with
+# FOUNDRY_NO_MATCH_PATH= instead, which was verified to work.
 
 [rpc_endpoints]
 xlayer = "https://rpc.xlayer.tech"
 
-# Fork suites are excluded from the default run, so run them explicitly with:
-#   FOUNDRY_NO_MATCH_PATH= forge test --match-path "test/fork/*" --fork-url xlayer
+# Run both suites under their own profile with:
+#   ./scripts/test.sh --fork
+# Running the fork suite under the default profile fails with NotActivated,
+# which is asserted rather than assumed — see scripts/test.sh --prove-split.
