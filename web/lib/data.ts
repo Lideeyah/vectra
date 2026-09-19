@@ -125,3 +125,53 @@ export async function loadPrices(limit = 400): Promise<PriceRow[]> {
     return [];
   }
 }
+
+/**
+ * Executed and TargetsSet events, decoded by tools/decode_legs.py.
+ *
+ * `origin` is load-bearing: a fork run produces real swaps through the real
+ * router, but its transaction hashes exist only on that fork. The interface
+ * shows them as hashes and refuses to link them to the explorer, because a
+ * dead link presented as proof is worse than no link.
+ */
+export type Leg = {
+  id: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  amountOut: string;
+  version: number;
+  txHash: string;
+  blockNumber: number;
+  timestamp: number | null;
+};
+
+export type Amendment = {
+  id: string;
+  previous: string[];
+  current: string[];
+  version: number;
+  timestamp: number;
+  txHash: string;
+  blockNumber: number;
+};
+
+export type History = {
+  origin: "fork" | "mainnet";
+  chainId: number;
+  note: string;
+  legs: Leg[];
+  amendments: Amendment[];
+};
+
+/**
+ * Mainnet history if it exists, otherwise the fork run. Never merged: they are
+ * different chains, and a combined list would attribute fork transactions to
+ * X Layer.
+ */
+export async function loadHistory(): Promise<History | null> {
+  return (
+    (await getJSON<History>("history.json")) ??
+    (await getJSON<History>("dev/history.json"))
+  );
+}

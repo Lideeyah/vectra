@@ -113,8 +113,24 @@ def main(argv):
     amendments = [decode_targets_set(l) for l in raw_targets]
     amendments.sort(key=lambda r: r["blockNumber"])
 
+    # Machine-readable, because the interface has to behave differently. These
+    # transactions happened on a fork: the swap, the router and the pool state
+    # are real, but the hashes do not exist on X Layer. Linking them to the
+    # explorer would produce a dead link presented as proof, which is worse than
+    # showing no link at all. The interface reads `origin` and refuses to link
+    # anything that is not on mainnet.
+    origin = argv[2] if len(argv) > 2 else "fork"
+    if origin not in ("fork", "mainnet"):
+        raise SystemExit(f"origin must be 'fork' or 'mainnet', got {origin!r}")
+
     out = {
-        "source": "anvil fork of X Layer, real OKX router — development data",
+        "origin": origin,
+        "chainId": 196,
+        "note": (
+            "anvil fork of X Layer against the real OKX router; the swap is "
+            "real, the transaction hashes exist only on the fork"
+            if origin == "fork" else "X Layer mainnet"
+        ),
         "legs": legs,
         "amendments": amendments,
     }

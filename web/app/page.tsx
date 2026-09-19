@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { Convergence, type Row } from "@/components/Convergence";
 import { ConvergenceShape } from "@/components/ConvergenceShape";
 import { Create } from "@/components/Create";
+import { Legs } from "@/components/Legs";
 import { Proof } from "@/components/Proof";
 import { Refusals } from "@/components/Refusals";
 import { Rules, type MandateView } from "@/components/Rules";
@@ -172,6 +173,8 @@ export default function Page() {
           <Rules m={phase.m} rateBps={null} />
         </>
       )}
+
+      <Legs />
 
       <Proof deployed={phase.k === "ready" || phase.k === "no-mandate"} dataBase={DATA_BASE} />
     </div>
