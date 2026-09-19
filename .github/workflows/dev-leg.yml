@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive }
       - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
 
@@ -102,6 +104,22 @@ jobs:
             MIN_OUT="$MIN_OUT" VECTRA_PAYLOAD="$VECTRA_PAYLOAD" \
             FOUNDRY_PROFILE=fork forge script script/DevLeg.s.sol --sig "leg()" \
             --rpc-url http://127.0.0.1:8545 --broadcast --unlocked | tee /tmp/leg.log
+
+      # The owner's controls, signed for real against this fork. Rendering a
+      # Pause button proves nothing; this asserts each one changes the state the
+      # contract reports, and that revoking the mandate leaves the USDC
+      # allowance standing — a claim the interface makes in words.
+      #
+      # Runs AFTER the leg, so the leg executes against a live mandate, and
+      # before the export, so the export also captures the real TargetsSet
+      # amendment this produces.
+      - name: Owner controls, end to end
+        id: controls
+        run: |
+          set -euo pipefail
+          cd web
+          npm ci
+          RPC=http://127.0.0.1:8545 VECTRA="$VECTRA" npx tsx scripts/e2e-controls.ts
 
       - name: Export the Executed logs
         if: always()

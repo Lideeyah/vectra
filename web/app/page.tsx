@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { Convergence, type Row } from "@/components/Convergence";
 import { ConvergenceShape } from "@/components/ConvergenceShape";
 import { Create } from "@/components/Create";
+import { Controls } from "@/components/Controls";
 import { Legs } from "@/components/Legs";
 import { Proof } from "@/components/Proof";
 import { Refusals } from "@/components/Refusals";
@@ -171,6 +172,14 @@ export default function Page() {
           <Convergence rows={phase.rows} toleranceBps={phase.m.driftBps} />
           <Refusals cycle={cycle} stale={stale} />
           <Rules m={phase.m} rateBps={null} />
+          <Controls
+            owner={phase.owner}
+            id={phase.id}
+            m={phase.m}
+            rows={phase.rows}
+            readOnly={phase.readOnly}
+            onDone={load}
+          />
         </>
       )}
 

@@ -80,6 +80,26 @@ export async function revoke(owner: Address, id: bigint) {
   return owned(owner, "revoke", id);
 }
 
+/**
+ * Changing a target changes the distance without a single trade, which is why
+ * the contract records the targets before and after and increments the version
+ * rather than forbidding it. Amending is permitted and auditable, not secret.
+ */
+export async function amendTargets(
+  owner: Address,
+  id: bigint,
+  targetShares: bigint[],
+): Promise<Hash> {
+  const hash = await wallet(owner).writeContract({
+    address: VECTRA_ADDRESS,
+    abi: VECTRA_ABI,
+    functionName: "amendTargets",
+    args: [id, targetShares],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
 async function owned(owner: Address, fn: "pause" | "resume" | "revoke", id: bigint) {
   const hash = await wallet(owner).writeContract({
     address: VECTRA_ADDRESS,
