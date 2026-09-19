@@ -555,14 +555,23 @@ Two consequences.
 
 **The caller-binding question is not yet answered, and the deadline is what blocks it.** Whether a payload built for one address works when forwarded by another is still an inference from the `userWalletAddress` parameter, because expiry fires first and masks it. Answering it requires a *fresh* payload built for the contract's own address — which cannot be requested until the contract has an address.
 
-**This reorders the deployment sequence, and favourably.** The contract can be deployed before it is trusted: it holds no funds, has no admin key, and is inert until someone grants it an allowance and creates a mandate. So:
+**Answer it before deploying, not after.** A CREATE address is deterministic from the deployer and its nonce, so the contract's address is knowable before it exists. The deployer has **nonce 0** on X Layer, which puts the first deployment at:
 
-1. Deploy, and verify on OKLink against the recorded bytecode hash.
-2. Request a swap payload with `userWalletAddress` set to the **deployed address**.
-3. Fork mainnet at the current block and forward that fresh payload through the deployed contract.
-4. Only then fund a mandate.
+```
+deployer  0x2F45E637920Cc7C7BE15130ab49224C989572AD8   (nonce 0)
+predicted 0xd24424Cc482D68b19e82aa7A6411C48aeD22215B
+```
 
-Step 3 answers the caller-binding question against the real router with a live payload, and it happens **before any user funds anything**. A deployment that turns out to be unusable costs the gas and nothing else.
+So the sequence is:
+
+1. `cast compute-address <deployer> --nonce <n>` for the predicted address.
+2. Request a swap payload with `userWalletAddress` set to **the predicted address**.
+3. Fork at the current block, deploy the contract *in the fork* at that same predicted address (`vm.setNonce` then deploy as the deployer), and forward the fresh payload through it.
+4. Only if that works, deploy for real.
+
+This is strictly better than deploying first. The failure being guarded against is the contract's **shape** being wrong, and learning that before deployment costs nothing at all — rather than costing a deployment plus a verified contract sitting on the explorer that nobody should use.
+
+**Then confirm on the real thing.** A fork is still a model, so after deployment: request a payload for the deployed address and execute one real leg on a mandate funded with a few dollars. That is the only instrument that can find what neither the fork nor the mocks will, and a plan to make contact is not contact.
 
 ## 15. BUILD ORDER
 

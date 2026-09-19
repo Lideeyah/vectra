@@ -25,7 +25,10 @@ import okx_dex
 USDC = "0xb6ceceab302e2e4948951ee7843fc24e92933061"
 NVDAX = "0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
 
-WALLET = os.environ.get("VECTRA_WALLET", "0x2f45e637920cc7c7be15130ab49224c989572ad8")
+# A blank workflow input sets the variable to "", not unset, so `or` rather
+# than a get() default.
+WALLET = (os.environ.get("VECTRA_WALLET") or
+          "0x2f45e637920cc7c7be15130ab49224c989572ad8")
 # A distinct address used only to test whether the router will direct output
 # somewhere other than the caller. Never funded, never transacted with.
 PROBE_RECIPIENT = "0x1111111111111111111111111111111111111111"
@@ -34,12 +37,12 @@ AMOUNT_USD = 5.0
 USDC_DECIMALS = 6
 SLIPPAGE_PERCENT = "0.5"   # half a percent, pending unit confirmation
 
-OUT = Path("data/verifications/swap.json")
+OUT = Path(os.environ.get("VECTRA_OUT") or "data/verifications/swap.json")
 
 
 def candidates():
     """Tokens to try, most-likely-liquid first."""
-    env = os.environ.get("VECTRA_TOKEN")
+    env = os.environ.get("VECTRA_TOKEN") or None
     if env:
         yield ("env", env)
 

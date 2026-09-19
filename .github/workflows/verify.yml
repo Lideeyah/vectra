@@ -9,6 +9,14 @@ on:
         description: "Token address to test against (blank = auto-pick a liquid one)"
         required: false
         default: ""
+      wallet:
+        description: "userWalletAddress for the payload. Use the PREDICTED contract address to test caller-binding before deploying."
+        required: false
+        default: ""
+      out:
+        description: "Output path (blank = data/verifications/swap.json)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -37,6 +45,8 @@ jobs:
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
           OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
           VECTRA_TOKEN: ${{ inputs.token }}
+          VECTRA_WALLET: ${{ inputs.wallet }}
+          VECTRA_OUT: ${{ inputs.out }}
         run: python verify_swap.py
 
       - name: Commit findings
