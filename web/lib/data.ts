@@ -157,7 +157,8 @@ export type Amendment = {
 };
 
 export type History = {
-  origin: "fork" | "mainnet";
+  /** Absent in files written before origin was recorded. Treated as "fork". */
+  origin?: "fork" | "mainnet";
   chainId: number;
   note: string;
   legs: Leg[];

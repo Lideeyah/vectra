@@ -29,6 +29,10 @@ export function Legs() {
   if (!loaded) return null;
 
   const legs = h?.legs ?? [];
+  // Unknown provenance is treated as a fork, never as mainnet. Getting this
+  // backwards would present fork transactions as X Layer ones, so the
+  // dangerous direction is the one that must require an explicit statement.
+  const onMainnet = h?.origin === "mainnet";
 
   return (
     <section style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
@@ -36,7 +40,7 @@ export function Legs() {
         LEGS EXECUTED
       </div>
 
-      {h && h.origin === "fork" && (
+      {h && !onMainnet && (
         <div
           style={{
             fontSize: 12,
@@ -68,7 +72,7 @@ export function Legs() {
             {legs.length} leg{legs.length === 1 ? "" : "s"}, oldest first
           </div>
           {legs.map((l) => (
-            <LegRow key={l.txHash + l.blockNumber} leg={l} linkable={h?.origin === "mainnet"} />
+            <LegRow key={l.txHash + l.blockNumber} leg={l} linkable={onMainnet} />
           ))}
         </>
       )}
@@ -93,23 +97,39 @@ function Amendments({ h }: { h: History | null }) {
   return (
     <div style={{ marginTop: 32 }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 6 }}>
-        TARGETS AMENDED
+        TARGET HISTORY
       </div>
-      <p className="dim" style={{ fontSize: 13, margin: "0 0 12px", maxWidth: 640 }}>
-        Changing a target changes the distance without a single trade. Each
-        change is recorded with the targets before and after it, so a gap that
-        closed because the target moved cannot be mistaken for one closed by
-        rebalancing.
-      </p>
+      {rows.some((r) => r.previous.length > 0) && (
+        <p className="dim" style={{ fontSize: 13, margin: "0 0 12px", maxWidth: 640 }}>
+          Changing a target changes the distance without a single trade. Each
+          change is recorded with the targets before and after it, so a gap that
+          closed because the target moved cannot be mistaken for one closed by
+          rebalancing.
+        </p>
+      )}
       {rows.map((a) => (
         <div key={a.txHash} style={{ padding: "12px 0", borderTop: "1px solid var(--bone-12)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13 }}>
-              mandate {a.id} · version {a.version - 1} → {a.version}
+              mandate {a.id} ·{" "}
+              {a.previous.length === 0
+                ? "targets set at creation"
+                : `version ${a.version - 1} → ${a.version}`}
             </span>
             <span className="faint" style={{ fontSize: 12 }}>{ago(a.timestamp)}</span>
           </div>
           {a.current.map((cur, i) => {
+            // No previous targets means this is the creation event, where
+            // there is no "before" to show. Printing 0 as the prior target
+            // would invent a state the mandate was never in.
+            if (a.previous.length === 0) {
+              return (
+                <div key={i} style={{ fontSize: 12, marginTop: 4 }}>
+                  <span className="mono">{shares18(cur)}</span>{" "}
+                  <span className="faint">shares</span>
+                </div>
+              );
+            }
             const prev = a.previous[i] ?? "0";
             const changed = prev !== cur;
             return (

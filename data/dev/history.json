@@ -1,5 +1,7 @@
 {
-  "source": "anvil fork of X Layer, real OKX router \u2014 development data",
+  "origin": "fork",
+  "chainId": 196,
+  "note": "anvil fork of X Layer against the real OKX router; the swap is real, the transaction hashes exist only on the fork",
   "legs": [
     {
       "id": "1",
