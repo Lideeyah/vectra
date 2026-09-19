@@ -476,6 +476,21 @@ Adjust weights, tolerance or cap. Each is a transaction. The interface shows wha
 
 Pause stops the agent immediately. Revoke ends the mandate permanently. Separately, the user can sell the basket back to USDC, which is a manual action in this version rather than something the agent does.
 
+**Revoking the mandate does not revoke the allowance, and the interface says so.** These are two permissions and only one of them is the mandate. `revoke()` moves no funds — the contract never holds any — and it does not touch the ERC-20 approval the owner granted. A user who revokes and walks away still has a standing allowance unless something tells them.
+
+This is verified rather than asserted. `web/scripts/e2e-controls.ts` approves USDC, revokes the mandate, and re-reads the allowance from chain:
+
+```
+ok   revoked                     chain=true
+ok   activeMandateOf cleared     chain=0
+ok   allowance SURVIVES revoke   chain=50000000
+ok   resume refused after revoke chain=true
+```
+
+So the interface shows the allowance as its own object, states that revoking the mandate did not take it back, and puts the button that clears it next to that sentence.
+
+**This belongs in the submission**, and it is the same character as the loss-bound framing of the cap in section 6: the interface tells you what the contract *does not* do. Most products would let a user walk away believing revoke undid everything. The disclosure costs nothing to make and is the difference between a custody claim and a custody guarantee.
+
 ---
 
 ## 10. INVARIANTS
