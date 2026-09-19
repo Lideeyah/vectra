@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { loadConstituents, type Constituents } from "@/lib/data";
 import { VECTRA_ADDRESS } from "@/lib/config";
 import { addr } from "@/lib/format";
+import { buildCreateParams, toShares } from "@/lib/createParams";
 import {
   approveUsdc, createMandate, readAllowance, revokeAllowance, maxUint256,
 } from "@/lib/write";
@@ -50,21 +51,19 @@ export function Create({ owner, onDone }: { owner: Address; onDone: () => void }
   const submit = async () => {
     setErr(null);
     try {
-      const cap = BigInt(Math.round(Number(capUsd) * 1e6));
-      setBusy("Approving USDC — transaction 1 of 2");
-      await approveUsdc(owner, cap);
-      setBusy("Creating the mandate — transaction 2 of 2");
-      await createMandate(owner, {
+      // Built by the same function the end-to-end test exercises, so the
+      // encoding the user signs is the encoding that was verified.
+      const p = buildCreateParams({
         tokens: chosen.map((c) => c.address as Address),
-        weightsBps: evenWeights(chosen.length),
-        targetShares: chosen.map((c) => toShares(targets[c.address] ?? "0")),
-        driftBps: Math.round(Number(driftPct) * 100),
-        maxLegUsdc: BigInt(Math.round(Number(legUsd) * 1e6)),
-        totalCapUsdc: cap,
-        maxLegBpsOfTarget: Math.round(Number(ratePct) * 100),
-        expiry: BigInt(Math.floor(Date.now() / 1000) + Number(days) * 86400),
+        targetsDecimal: chosen.map((c) => targets[c.address] ?? "0"),
+        capUsd, legUsd, ratePct, driftPct, days,
         agent: AGENT_DEFAULT,
+        nowSeconds: Math.floor(Date.now() / 1000),
       });
+      setBusy("Approving USDC — transaction 1 of 2");
+      await approveUsdc(owner, p.totalCapUsdc);
+      setBusy("Creating the mandate — transaction 2 of 2");
+      await createMandate(owner, p);
       setBusy(null);
       onDone();
     } catch (e) {
@@ -239,15 +238,4 @@ function Field({ label, value, set, unit, note }: {
   );
 }
 
-function evenWeights(n: number): number[] {
-  const base = Math.floor(10000 / n);
-  const w = Array(n).fill(base);
-  w[0] += 10000 - base * n;
-  return w;
-}
 
-/** Decimal string to 18dp share units, without floating point. */
-function toShares(v: string): bigint {
-  const [w = "0", f = ""] = v.split(".");
-  return BigInt(w || "0") * 10n ** 18n + BigInt((f + "0".repeat(18)).slice(0, 18) || "0");
-}

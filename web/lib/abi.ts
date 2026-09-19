@@ -1,105 +1,18 @@
 /**
- * Only the surface the interface uses. mandate() is read BY NAMED COMPONENT —
- * the tuple is a 10-tuple fixed at deployment (SPEC 5.2.2), and positional
- * reads are how an arity change becomes a silent failure.
+ * The contract ABI, generated from the compiled artifact rather than written by
+ * hand.
+ *
+ * A hand-written copy had `expiry` and `maxLegBpsOfTarget` transposed in the
+ * MandateParams tuple. That changes the createMandate selector, so every call
+ * hit no function at all and reverted with empty data — 28,470 gas, no error
+ * name, nothing to decode.
+ *
+ * Nothing could catch it. Solidity initialises structs BY NAME, which is
+ * order-independent, so the contract tests and the seed script were all correct
+ * and all passed while this file was wrong. Only a positional caller — this one
+ * — could see it, and only against a real chain.
+ *
+ * Regenerate with:  node scripts/gen-abi.mjs
+ * Check for drift:  node scripts/gen-abi.mjs --check
  */
-export const VECTRA_ABI = [
-  {
-    type: "function", name: "mandate", stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [
-      { name: "owner_", type: "address" },
-      { name: "agent", type: "address" },
-      { name: "expiry", type: "uint64" },
-      { name: "paused", type: "bool" },
-      { name: "revoked", type: "bool" },
-      { name: "driftBps", type: "uint16" },
-      { name: "maxLegUsdc", type: "uint256" },
-      { name: "totalCapUsdc", type: "uint256" },
-      { name: "spentUsdc", type: "uint256" },
-      { name: "version", type: "uint64" },
-    ],
-  },
-  {
-    type: "function", name: "position", stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [
-      { name: "tokens", type: "address[]" },
-      { name: "currentShares", type: "uint256[]" },
-      { name: "targetShares", type: "uint256[]" },
-    ],
-  },
-  {
-    type: "function", name: "basket", stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [
-      { name: "tokens", type: "address[]" },
-      { name: "weightsBps", type: "uint16[]" },
-      { name: "targetShares", type: "uint256[]" },
-    ],
-  },
-  {
-    type: "function", name: "isActive", stateMutability: "view",
-    inputs: [{ name: "id", type: "uint256" }],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function", name: "activeMandateOf", stateMutability: "view",
-    inputs: [{ name: "", type: "address" }],
-    outputs: [{ type: "uint256" }],
-  },
-  { type: "function", name: "router", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "spender", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "usdc", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "DUST_WEI", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  {
-    type: "function", name: "createMandate", stateMutability: "nonpayable",
-    inputs: [{
-      name: "p", type: "tuple",
-      components: [
-        { name: "tokens", type: "address[]" },
-        { name: "weightsBps", type: "uint16[]" },
-        { name: "targetShares", type: "uint256[]" },
-        { name: "driftBps", type: "uint16" },
-        { name: "maxLegUsdc", type: "uint256" },
-        { name: "totalCapUsdc", type: "uint256" },
-        { name: "maxLegBpsOfTarget", type: "uint16" },
-        { name: "expiry", type: "uint64" },
-        { name: "agent", type: "address" },
-      ],
-    }],
-    outputs: [{ name: "id", type: "uint256" }],
-  },
-  {
-    type: "function", name: "amendTargets", stateMutability: "nonpayable",
-    inputs: [
-      { name: "id", type: "uint256" },
-      { name: "targetShares", type: "uint256[]" },
-    ],
-    outputs: [],
-  },
-  { type: "function", name: "pause", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },
-  { type: "function", name: "resume", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },
-  { type: "function", name: "revoke", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },
-  {
-    type: "event", name: "TargetsSet",
-    inputs: [
-      { name: "id", type: "uint256", indexed: true },
-      { name: "previous", type: "uint256[]", indexed: false },
-      { name: "current", type: "uint256[]", indexed: false },
-      { name: "version", type: "uint64", indexed: false },
-      { name: "timestamp", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event", name: "Executed",
-    inputs: [
-      { name: "id", type: "uint256", indexed: true },
-      { name: "tokenIn", type: "address", indexed: false },
-      { name: "tokenOut", type: "address", indexed: false },
-      { name: "amountIn", type: "uint256", indexed: false },
-      { name: "amountOut", type: "uint256", indexed: false },
-      { name: "version", type: "uint64", indexed: false },
-    ],
-  },
-] as const;
+export { VECTRA_ABI } from "./abi.generated";
