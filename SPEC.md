@@ -570,12 +570,15 @@ predicted 0xd24424Cc482D68b19e82aa7A6411C48aeD22215B
 
 **CREATE2 is the better answer and is deliberately not taken this week.** A fixed salt makes the address independent of nonce entirely, re-derivable at any time without depending on a key having stayed untouched. It is the right engineering and the wrong use of the remaining days.
 
+**Fetch and use in one process.** The payload's useful life is minutes, so it must never be routed through a file, a commit, a notification and a person before it is used — that is four chances to expire around a two-minute artifact, and every earlier attempt died of exactly that. The `caller binding` workflow fetches a payload for the predicted address and forwards it through a contract deployed at that same address in a fork, in one job, seconds apart. Nothing is committed and nobody is in the loop.
+
 So the sequence is:
 
 1. `cast compute-address <deployer> --nonce <n>` for the predicted address.
-2. Request a swap payload with `userWalletAddress` set to **the predicted address**.
-3. Fork at the current block, deploy the contract *in the fork* at that same predicted address (`vm.setNonce` then deploy as the deployer), and forward the fresh payload through it.
-4. Only if that works, deploy for real.
+2. One job: fetch a payload for that address, then immediately fork, deploy in-fork at the same address via `vm.setNonce`, and forward it.
+3. Only if that works, deploy for real.
+
+The recorded payloads in `data/verifications/` stay useful as fixtures for shape tests — selector, length, router target — because those do not care whether the deadline has passed. The caller-binding test must never read one.
 
 This is strictly better than deploying first. The failure being guarded against is the contract's **shape** being wrong, and learning that before deployment costs nothing at all — rather than costing a deployment plus a verified contract sitting on the explorer that nobody should use.
 

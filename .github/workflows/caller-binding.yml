@@ -1,0 +1,77 @@
+name: caller binding
+
+# Fetches a fresh swap payload for the PREDICTED contract address and forwards
+# it through a contract deployed at that same address in a fork — in ONE job,
+# seconds apart. The router enforces a deadline, so a payload routed through a
+# commit and a human has four chances to expire before it is used.
+#
+# Read-only against mainnet: the fork is local, nothing is signed or broadcast.
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: "Predicted contract address the payload is built for"
+        required: false
+        default: "0xd24424Cc482D68b19e82aa7A6411C48aeD22215B"
+      fork_block:
+        description: "Block to pin the fork to (blank = latest)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: caller-binding
+  cancel-in-progress: false
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      # Reuse fetched chain state between runs. The public X Layer RPC times out
+      # refetching the router's storage, which is a 13KB contract.
+      - name: Cache the fork
+        uses: actions/cache@v4
+        with:
+          path: ~/.foundry/cache
+          key: foundry-xlayer-${{ inputs.fork_block || 'latest' }}
+          restore-keys: foundry-xlayer-
+
+      - name: Fetch payload and forward it, same job
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          VECTRA_WALLET: ${{ inputs.address }}
+        run: |
+          set -euo pipefail
+
+          echo "fetching a payload for ${VECTRA_WALLET}"
+          python fetch_payload.py > /tmp/payload.env
+          # The address the payload was built for, asserted by the test.
+          echo "VECTRA_PAYLOAD_WALLET=${VECTRA_WALLET}" >> /tmp/payload.env
+
+          set -a; . /tmp/payload.env; set +a
+          echo "payload fetched, ${#VECTRA_PAYLOAD} hex chars; forwarding now"
+
+          FORK_ARGS="--fork-url https://rpc.xlayer.tech"
+          if [ -n "${{ inputs.fork_block }}" ]; then
+            FORK_ARGS="$FORK_ARGS --fork-block-number ${{ inputs.fork_block }}"
+          fi
+
+          FOUNDRY_NO_MATCH_PATH= forge test \
+            --match-path "test/fork/CallerBinding.t.sol" \
+            $FORK_ARGS -vv

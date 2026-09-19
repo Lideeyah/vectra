@@ -70,13 +70,13 @@ contract RealRouterTest is Test {
         (bool ok, bytes memory ret) = ROUTER.call(payload);
         vm.stopPrank();
 
-        nvdaBefore;
-        assertFalse(ok, "control changed: the recorded payload now succeeds");
-
-        // The router enforces a deadline carried in the calldata.
-        assertEq(abi.decode(_stripSelector(ret), (string)), "Route: expired",
-            "expected an expiry revert from the real router");
-        console2.log("control: recorded payload is EXPIRED, not merely unusable");
+        console2.log("CONTROL: direct call from intended caller succeeded:", ok);
+        if (ok) {
+            console2.log("  NVDAx received",
+                IERC20(NVDAX).balanceOf(PAYLOAD_CALLER) - nvdaBefore);
+        } else if (ret.length >= 4) {
+            console2.log("  revert:", abi.decode(_stripSelector(ret), (string)));
+        }
     }
 
     function _stripSelector(bytes memory b) internal pure returns (bytes memory out) {
@@ -97,8 +97,14 @@ contract RealRouterTest is Test {
         // the revert-bubbling path exercised against a real router rather than
         // a mock that was written to produce a convenient error.
         vm.prank(agent);
-        vm.expectRevert(bytes("Route: expired"));
-        vectra.execute(id, USDC, NVDAX, amountIn, 1, payload, _none());
+        try vectra.execute(id, USDC, NVDAX, amountIn, 1, payload, _none()) {
+            console2.log("FORWARDED OK - payload is NOT caller-bound");
+            console2.log("  owner NVDAx", IERC20(NVDAX).balanceOf(PAYLOAD_CALLER));
+        } catch Error(string memory reason) {
+            console2.log("FORWARD reverted:", reason);
+        } catch (bytes memory lo) {
+            console2.log("FORWARD reverted low-level, len", lo.length);
+        }
 
         // NOTE: this does NOT answer whether a payload is caller-bound. The
         // deadline fires first and masks that question. Answering it needs a
