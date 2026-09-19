@@ -197,6 +197,48 @@ Fixed at deployment and unchangeable, so recorded here from the source rather th
 
 **Rule for the frontend and for any indexer: read `mandate()` by named component, never positionally.** Positional reads are how an arity change becomes a silent type-level failure rather than a loud one.
 
+### 5.2.4 Deployment and verification runbook
+
+Deploy and verify **in the same session**. Reconstructing compiler settings later against an immutable address is the hard version of this problem, so the inputs are recorded here at the point they were fixed rather than re-derived afterwards.
+
+**Build inputs, pinned:**
+
+| | |
+|---|---|
+| compiler | `0.8.24+commit.e11b9ed9` |
+| optimizer | enabled, 200 runs |
+| viaIR | false |
+| evm_version | **`paris`** — pinned, not inherited |
+
+`evm_version` was previously unpinned and Foundry defaulted it to `cancun`. That is wrong twice over on this chain. X Layer is a zkEVM and may not implement Cancun opcodes; and an unpinned setting means a rebuild under a later Foundry produces *different bytecode* for an address that can never be redeployed. Pinning to `paris` avoids `PUSH0` and every Cancun opcode. Pinning it changed the runtime bytecode from 10,063 to 10,256 bytes, which is the evidence the setting actually took effect.
+
+**Constructor arguments**, ABI-encoded, for the verified addresses:
+
+```
+router  0x7c5bEE2a8091C3ef39072f64F18Fac913060AEaF
+spender 0x8b773D83bc66Be128c60e07E17C8901f7a64F000
+usdc    0xB6CEceAB302E2E4948951eE7843FC24E92933061
+
+0x0000000000000000000000007c5bee2a8091c3ef39072f64f18fac913060aeaf
+  0000000000000000000000008b773d83bc66be128c60e07e17c8901f7a64f000
+  000000000000000000000000b6ceceab302e2e4948951ee7843fc24e92933061
+```
+
+**Verification.** X Layer's explorer is OKLink, and Foundry supports it as a verifier backend, so no Hardhat and no manual paste:
+
+```
+forge verify-contract <address> contracts/VectraMandate.sol:VectraMandate \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/xlayer \
+  --watch
+```
+
+Chain id 196, `chainShortName` `xlayer`, OKLink API key passed as the Etherscan key argument. Standard JSON Input is the safer route because it carries the optimizer settings rather than relying on them being re-derived.
+
+**Two things to treat as unsettled until done rather than read.** The API key requirement is not stated on the Foundry page, so an OKLink account key must be in hand *before* deployment rather than discovered afterwards. And the docs say to wait at least a minute after deployment before verifying — which matters because a failed first attempt is indistinguishable from an unverifiable contract.
+
+**A wrong deployment is detectable before anyone funds it.** `router`, `spender` and `usdc` are public immutables embedded in the runtime bytecode, so the deployed configuration can be read straight off the contract and compared against the table above without trusting the deploy transaction.
+
 ### 5.2.3 Timestamp dependence, and its stated consequence
 
 Expiry is enforced against `block.timestamp` on every path that could execute, as a strict boundary: at the expiry second the mandate is already dead, not dying.
