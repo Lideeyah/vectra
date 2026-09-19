@@ -51,6 +51,15 @@ def default_tokens():
     # proportionality story persuasive. A run over the constituents alone would
     # leave those numbers unmeasured rather than confirmed or killed, so the
     # worst-measured quotable assets are graded alongside.
+    #
+    # Note what this selection can and cannot show. These ranks come from the
+    # flawed two-quote method, so "the three worst" is itself an artifact of it;
+    # the genuinely thinnest assets may be elsewhere entirely. Grading these
+    # three tests the numbers the claim was built on, which is the point. But if
+    # they collapse, the conclusion is NOT that the tail was found and then
+    # disproved — it is that the old method could not identify a tail at all.
+    # Establishing whether a real tail exists would need a ladder across the
+    # whole quotable set, which is a separate run.
     probe = Path("data/liquidity_probe.json")
     if probe.exists():
         entries = [e for e in json.loads(probe.read_text()).values()
