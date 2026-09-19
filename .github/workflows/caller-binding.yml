@@ -78,7 +78,7 @@ jobs:
           set +e
           FOUNDRY_NO_MATCH_PATH= forge test \
             --match-path "test/fork/CallerBinding.t.sol" \
-            $FORK_ARGS -vv 2>&1 | tee /tmp/result.log
+            $FORK_ARGS -vvvv 2>&1 | tee /tmp/result.log
           RC=${PIPESTATUS[0]}
           set -e
 

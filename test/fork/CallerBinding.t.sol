@@ -53,6 +53,42 @@ contract CallerBindingTest is Test {
 
     function _none() internal pure returns (address[] memory a) { a = new address[](0); }
 
+    /// @notice CONTROL. Call the router DIRECTLY from the contract's address,
+    ///         bypassing execute entirely, with the tokens already in place and
+    ///         the spender approved. This separates two very different
+    ///         findings that both surface as "adaptor call failed":
+    ///
+    ///           control fails  -> the payload or the pool state is the problem,
+    ///                             and our contract's shape is not implicated
+    ///           control passes -> the payload is fine when the address calls
+    ///                             it plainly, so something in execute's flow
+    ///                             breaks it, and that is a contract bug
+    function test_Control_RouterCalledDirectlyFromTheContractAddress() public {
+        uint256 fetchedAt = vm.envOr("VECTRA_FETCH_TIME", uint256(0));
+        if (fetchedAt > block.timestamp) vm.warp(fetchedAt);
+
+        deal(USDC, address(vectra), amountIn);
+
+        vm.startPrank(address(vectra));
+        IERC20(USDC).approve(SPENDER, type(uint256).max);
+        uint256 before = IERC20(NVDAX).balanceOf(address(vectra));
+        (bool ok, bytes memory ret) = ROUTER.call(payload);
+        vm.stopPrank();
+
+        console2.log("CONTROL direct-from-contract succeeded:", ok);
+        if (ok) {
+            console2.log("  NVDAx received",
+                IERC20(NVDAX).balanceOf(address(vectra)) - before);
+            console2.log("  => the payload works for this address; execute's "
+                         "flow is what breaks it");
+        } else {
+            console2.log("  revert len", ret.length);
+            if (ret.length >= 4) {
+                console2.log("  => payload/pool state, not our contract shape");
+            }
+        }
+    }
+
     function test_PayloadBuiltForTheContractIsForwardable() public {
         // The payload must have been built for this exact address, or the test
         // answers nothing.
