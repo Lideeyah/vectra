@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import {Test, console2} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {VectraMandate} from "../contracts/VectraMandate.sol";
+import {MockRouter} from "./mocks/Mocks.sol";
 
 interface IXStock is IERC20 {
     function sharesOf(address) external view returns (uint256);
@@ -129,6 +130,106 @@ contract ForkXLayerTest is Test {
 
         // A balance-based rule would now read four times the shares and refuse.
         assertGt(t.balanceOf(WNVDAX), tgt[0], "balance exceeds target as expected");
+    }
+
+    // --------------------------------------------------- the sell side
+
+    MockRouter internal mockRouter;
+    VectraMandate internal sellVectra;
+
+    /// @dev Called by the router MID-SWAP to force a corporate event on a real
+    ///      deployed token. A mock cannot rewrite a live contract's storage, but
+    ///      the test can, and cheatcodes still work when re-entered.
+    function forceMultiplier(address token, uint256 value) external {
+        vm.store(token, _findMultiplierSlot(token, IXStock(token).multiplier()), bytes32(value));
+    }
+
+    function _setUpSell(uint256 targetShares) internal returns (uint256 id) {
+        mockRouter = new MockRouter();
+        sellVectra = new VectraMandate(address(mockRouter), address(mockRouter), USDC);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = NVDAX;
+        uint16[] memory weights = new uint16[](1);
+        weights[0] = 10_000;
+        uint256[] memory targets = new uint256[](1);
+        targets[0] = targetShares;
+
+        vm.startPrank(WNVDAX);
+        IERC20(NVDAX).approve(address(sellVectra), type(uint256).max);
+        id = sellVectra.createMandate(VectraMandate.MandateParams({
+            tokens: tokens, weightsBps: weights, targetShares: targets,
+            driftBps: 500, maxLegUsdc: 5e6, totalCapUsdc: 50e6,
+            expiry: uint64(block.timestamp + 30 days), agent: agent
+        }));
+        vm.stopPrank();
+        deal(USDC, address(mockRouter), 1_000e6);
+    }
+
+    function _none() internal pure returns (address[] memory a) {
+        a = new address[](0);
+    }
+
+    /// @notice Sell with a split mid-transaction. The contract holds the
+    ///         REBASING token at that moment, which is the case the buy-side
+    ///         tests never exercised.
+    function test_Fork_SellWithMultiplierIncrease_SettlesCleanly() public {
+        uint256 shares = IXStock(NVDAX).sharesOf(WNVDAX);
+        uint256 id = _setUpSell(shares / 2);          // well above target
+        uint256 usdcBefore = IERC20(USDC).balanceOf(WNVDAX);
+
+        bytes memory cd = abi.encodeCall(MockRouter.swapThenCall, (
+            NVDAX, USDC, 1e18, 200e6, address(this),
+            abi.encodeCall(this.forceMultiplier, (NVDAX, 2e18))
+        ));
+        vm.prank(agent);
+        sellVectra.execute(id, NVDAX, USDC, 1e18, 200e6, cd, _none());
+
+        assertEq(IERC20(USDC).balanceOf(WNVDAX) - usdcBefore, 200e6, "owner USDC wrong");
+        assertEq(IERC20(NVDAX).balanceOf(address(sellVectra)), 0, "token retained");
+        assertEq(IERC20(USDC).balanceOf(address(sellVectra)), 0, "usdc retained");
+        assertEq(IXStock(NVDAX).multiplier(), 2e18, "rebase did not fire");
+        console2.log("sell + split: owner received USDC", uint256(200e6));
+    }
+
+    /// @notice A short fill must revert rather than reach the owner, and the
+    ///         check must read real holdings, not a computed delta.
+    function test_Fork_SellWithMultiplierDecrease_ShortFillReverts() public {
+        uint256 shares = IXStock(NVDAX).sharesOf(WNVDAX);
+        uint256 id = _setUpSell(shares / 2);
+
+        bytes memory cd = abi.encodeCall(MockRouter.swapThenCall, (
+            NVDAX, USDC, 1e18, 150e6, address(this),                 // delivers 150
+            abi.encodeCall(this.forceMultiplier, (NVDAX, 5e17))      // reverse split
+        ));
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.InsufficientOutput.selector);
+        sellVectra.execute(id, NVDAX, USDC, 1e18, 200e6, cd, _none()); // demands 200
+    }
+
+    /// @notice Under-consumed rebasing input returns to the owner, and the cap
+    ///         is untouched because a sell commits no USDC.
+    function test_Fork_SellUnderConsumed_ReturnsTokenAndLeavesCapAlone() public {
+        uint256 shares = IXStock(NVDAX).sharesOf(WNVDAX);
+        uint256 id = _setUpSell(shares / 2);
+        uint256 ownerTokenBefore = IERC20(NVDAX).balanceOf(WNVDAX);
+
+        // Authorised 2e18 of NVDAx, router consumes only 1e18.
+        bytes memory cd = abi.encodeCall(
+            MockRouter.swap, (NVDAX, USDC, 1e18, 200e6)
+        );
+        vm.prank(agent);
+        sellVectra.execute(id, NVDAX, USDC, 2e18, 200e6, cd, _none());
+
+        uint256 residual = IERC20(NVDAX).balanceOf(address(sellVectra));
+        assertLe(residual, sellVectra.DUST_WEI(), "more than rounding dust retained");
+        console2.log("residual wei after a rebasing-token sell", residual);
+        assertApproxEqAbs(IERC20(NVDAX).balanceOf(WNVDAX), ownerTokenBefore - 1e18, 2,
+            "unconsumed input not returned");
+
+        (,,,,,,,, uint256 spent) = sellVectra.mandate(id);
+        assertEq(spent, 0, "a sell must not consume cap headroom");
+        console2.log("sell under-consumed: cap spent stays", uint256(spent));
     }
 
     // ------------------------------------------------------------- helpers

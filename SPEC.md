@@ -122,6 +122,20 @@ So the coarser guarantee is also the more durable one. That is worth stating as 
 
 The honest limitation remains: a share quantity is a proxy for the value weights the product cares about, and it drifts from them as prices move. Re-targeting is an owner action, never an agent one.
 
+### 5.2.1 The cap under a two-directional agent
+
+**Decision: the cap tracks cumulative USDC *spent*, and a sell does not refund headroom.**
+
+The alternative — a net-position cap where selling returns headroom — was rejected. The cap exists to bound how much the owner can ever be committed to, not to bound how much the agent may trade. Those are different quantities, and it is the first the user is consenting to when they sign. "This agent may put at most fifty dollars of my money to work" is a sentence a user can hold in their head; "this agent may hold at most fifty dollars of exposure at any instant, replenishing as it sells" is not, and it silently permits unlimited lifetime turnover.
+
+Concretely: a $50 cap with $50 spent is exhausted. Selling $20 back to USDC does **not** restore $20 of buying power. The mandate is finished buying; it may still sell to converge, since selling commits no new capital.
+
+**The churn objection, and why it does not bite.** A cap that never decreases, combined with an agent that can sell, appears to permit unbounded activity: buy, sell, buy again, all under an untouched cap. It does not, because every leg must move a position *toward* target, and a buy immediately following a sell of the same token moves it away. This is asserted rather than assumed — `test_SellThenImmediateRebuy_IsRefused` sells a still-overweight position and confirms the rebuy reverts with `WrongDirection`.
+
+**The gap that assertion exposed.** The direction rule tests the position *before* the leg, not after, and the contract cannot bound a sell's size because sizing in USD needs a price. So a single oversized sell can cross below target, and once below, a rebuy is legitimately permitted. Oscillation is therefore prevented only while legs are correctly sized — which is the agent's responsibility, not the contract's. `test_OversizedSellCrossesTarget_ThenRebuyIsPermitted_KnownGap` asserts this rather than hiding it.
+
+The fix, if it is wanted, is cheap and needs no oracle: require post-state `sharesOf` to remain on the correct side of `targetShares`, which is checkable in share terms. It is not implemented here because it changes the contract's guarantee surface, and that is a decision to take deliberately rather than inside a leg-selection change.
+
 **Every leg has USDC on one side.** Token-to-token legs are rejected. Beyond removing an unbounded-churn surface, this means cap accounting is always denominated in the unit the cap is written in. No conversion, no oracle, no ambiguity about what "spent" means.
 
 Caps are denominated in USDC throughout, never in basket-token units. USDC does not rebase; xStocks do. A cap expressed in a rebasing token would silently change meaning when a multiplier activates.
@@ -265,9 +279,9 @@ Compose the basket: pick from available xStocks on X Layer, set weights, or take
 
 Set the mandate: drift tolerance, maximum single trade, total spend cap, expiry. Each has a sensible default and an explanation of what it bounds. The user should understand that these are limits on what the agent may do, not settings for how it behaves.
 
-Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total, never more than Y in one trade, only to buy tokens that are below their target weight and sell tokens above it, until this date, and you can stop it at any time."
+Review: a plain-language summary of exactly what is being authorised. "The agent may spend up to X USDC in total, never more than Y in one trade, only to buy tokens below their target weight and sell tokens above it, until this date, and you can stop it at any time. Selling does not give it more to spend."
 
-Approve allowances. One transaction per token, or a single approval for USDC if the initial build is buy-only. Explain why each is needed.
+Approve allowances. The agent trades in both directions, so every basket token needs an allowance as well as USDC: a sell pulls the token, a buy pulls USDC. Explain why each is needed, and that each is capped by the mandate's spend limit.
 
 Create the mandate. One transaction.
 
@@ -439,6 +453,8 @@ Recorded as they are found, so the document does not quietly diverge from what i
 **The universe is much larger than assumed.** X Layer lists hundreds of xStocks. Section 9.1's "pick from available xStocks" is not a workable interface at that scale, and "choose ten by liquidity" is no longer an obvious selection rule. This strengthens section 2A's position that baskets should be defined indices, and that decision should be taken with the liquidity probe results in hand.
 
 **OKX's edge rejects default HTTP clients.** Requests carrying a library default user agent are refused by Cloudflare with error 1010 before reaching the API. Clients must send ordinary browser headers. If this escalates to TLS fingerprinting, the correct response is to adopt OKX's own SDK rather than push further against the edge.
+
+**Exact zero is not reachable on a rebasing token.** `balanceOf` is derived by integer division from shares, so transferring the full balance rounds the share conversion down and can leave a wei behind. The zero-balance invariant is therefore bounded by `DUST_WEI = 1000` rather than asserted as exact — roughly 1e-15 of a token, a ceiling rather than an allowance. Found by a fork test against real NVDAx at multiplier 1.0017; the mocks never caught it because their multiplier is exactly 1e18 and does not round. Observed residual on a real sell: **1 wei**.
 
 **Depth is measured, not read from a field.** The aggregator returns `priceImpactPercentage` as null on this chain, so the original plan to rank constituents by reported price impact could not work. Depth is instead observed directly: quote the same token at one dollar and at fifty, and read how far the rate degrades between them. This is a better method than the one it replaces, not merely a workaround — it is a direct observation of what the book does under size, rather than a number the venue reports about itself, and it cannot be misreported. The same technique settled the price-unit question on Gapless.
 

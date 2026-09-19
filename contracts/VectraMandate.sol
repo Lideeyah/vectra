@@ -60,6 +60,16 @@ contract VectraMandate is ReentrancyGuard {
     uint64 public constant MAX_HORIZON = 365 days;
     uint256 public constant MAX_SWEEP = 8;
 
+    /// @notice The contract must retain nothing of economic value after a call.
+    ///         Exact zero is not always reachable: balanceOf on a rebasing token
+    ///         is derived by integer division (shares * multiplier / 1e18), so
+    ///         transferring the full balance rounds the share conversion down
+    ///         and can leave a wei or two behind. Found by a fork test against
+    ///         real NVDAx, whose multiplier is 1.0017 rather than the mocks'
+    ///         exact 1e18. At 18 decimals this bound is ~1e-15 of a token —
+    ///         fractions of a nanocent — and it is a ceiling, not an allowance.
+    uint256 public constant DUST_WEI = 1000;
+
     /// @notice The aggregator contract this mandate may call. Immutable by design.
     address public immutable router;
     /// @notice The address allowances are granted to. On OKX this is frequently
@@ -296,12 +306,12 @@ contract VectraMandate is ReentrancyGuard {
             if (stuck != 0) IERC20(s).safeTransfer(owner_, stuck);
         }
 
-        if (IERC20(tokenIn).balanceOf(address(this)) != 0
-            || IERC20(tokenOut).balanceOf(address(this)) != 0) {
+        if (IERC20(tokenIn).balanceOf(address(this)) > DUST_WEI
+            || IERC20(tokenOut).balanceOf(address(this)) > DUST_WEI) {
             revert ContractRetainedFunds();
         }
         for (uint256 i; i < n; ++i) {
-            if (IERC20(sweep[i]).balanceOf(address(this)) != 0) {
+            if (IERC20(sweep[i]).balanceOf(address(this)) > DUST_WEI) {
                 revert ContractRetainedFunds();
             }
         }

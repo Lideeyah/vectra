@@ -182,11 +182,77 @@ def build_state(m):
             "totalUsd": total, "refusals": refusals}
 
 
+def distance_bps(values, total, targets):
+    """Total distance from target, as the sum of absolute weight errors.
+
+    L1 rather than squared error: the contract permits one leg per cycle, and L1
+    makes the single best leg the one closing the largest single gap, which is
+    what convergence one step at a time actually wants.
+    """
+    if total <= 0:
+        return sum(abs(t) for t in targets)
+    return sum(abs((v / total) * 10_000 - t) for v, t in zip(values, targets))
+
+
+def evaluate_legs(m, state):
+    """Every admissible leg in both directions, with the distance each reaches.
+
+    A leg is admissible if it moves a position toward target. Sizing is bounded
+    by the drift gap, the per-leg limit, and what is actually available to
+    spend or sell.
+    """
+    tol = m["driftToleranceBps"]
+    positions = state["positions"]
+    total = state["totalUsd"]
+    remaining_cap = m["totalCapUsdc"] - m["spentUsdc"]
+
+    values = [p["valueUsd"] or 0 for p in positions]
+    targets = [p["targetWeightBps"] for p in positions]
+    before = distance_bps(values, total, targets)
+
+    candidates = []
+    for i, p in enumerate(positions):
+        if not p["priceUsd"] or abs(p["driftBps"]) <= tol:
+            continue
+        gap_usd = (abs(p["driftBps"]) / 10_000) * total
+
+        if p["driftBps"] < 0:
+            # Underweight: buy with USDC. Spending consumes cap headroom.
+            size = min(gap_usd, m["maxLegUsdc"], remaining_cap,
+                       state["usdcValueUsd"])
+            direction, delta = "buy", +1
+        else:
+            # Overweight: sell into USDC. A sell commits no new capital, so it
+            # does not consume cap headroom — see SPEC 5.2 on the cap decision.
+            size = min(gap_usd, m["maxLegUsdc"], p["valueUsd"] or 0)
+            direction, delta = "sell", -1
+
+        if size < 0.01:
+            continue
+
+        trial = list(values)
+        trial[i] += delta * size
+        after = distance_bps(trial, total, targets)
+        candidates.append({
+            "direction": direction, "symbol": p["symbol"],
+            "address": p["address"], "amountUsd": round(size, 6),
+            "priceUsd": p["priceUsd"], "decimals": p["decimals"],
+            "driftBps": p["driftBps"],
+            "distanceBefore": round(before, 2),
+            "distanceAfter": round(after, 2),
+            "reductionBps": round(before - after, 2),
+        })
+
+    candidates.sort(key=lambda c: -c["reductionBps"])
+    return before, candidates
+
+
 def select_leg(m, state):
     """The single leg that most reduces total distance from target.
 
-    Only USDC-funded buys are selected in this version: selling is permitted by
-    the contract but the initial build is buy-only, matching SPEC 9.1.
+    Both directions are considered. A buy-only agent cannot converge from an
+    overweight position, which is most of the product's job — the contract was
+    built symmetric and the agent now matches it.
     """
     tol = m["driftToleranceBps"]
     priced = [p for p in state["positions"] if p["priceUsd"]]
@@ -198,43 +264,61 @@ def select_leg(m, state):
         return None, (f"largest drift {abs(largest['driftBps'])}bps is within "
                       f"tolerance {tol}bps")
 
+    before, candidates = evaluate_legs(m, state)
+    state["distanceBefore"] = round(before, 2)
+    state["candidates"] = candidates
+
+    if candidates:
+        best = candidates[0]
+        leg = {
+            "direction": best["direction"],
+            "symbol": best["symbol"],
+            "tokenIn": "USDC" if best["direction"] == "buy" else best["symbol"],
+            "tokenInAddress": USDC if best["direction"] == "buy" else best["address"],
+            "tokenOut": best["symbol"] if best["direction"] == "buy" else "USDC",
+            "tokenOutAddress": best["address"] if best["direction"] == "buy" else USDC,
+            "amountUsd": best["amountUsd"],
+            "priceUsd": best["priceUsd"],
+            "decimals": best["decimals"],
+            "driftBps": best["driftBps"],
+            "distanceBefore": best["distanceBefore"],
+            "distanceAfter": best["distanceAfter"],
+            "reductionBps": best["reductionBps"],
+            "rejected": candidates[1:],
+            "reason": (f"{best['symbol']} is {abs(best['driftBps'])}bps "
+                       f"{'below' if best['driftBps'] < 0 else 'above'} target; "
+                       f"this leg cuts total distance from "
+                       f"{best['distanceBefore']} to {best['distanceAfter']}bps"),
+        }
+        return leg, None
+
+    # Nothing admissible. Name the binding constraint, not the first blocker.
     under = [p for p in priced if p["driftBps"] < -tol]
     over = [p for p in priced if p["driftBps"] > tol]
-
-    # Report the real constraint, not the first one hit. A position that is
-    # overweight needs a sell; saying "no USDC" would send the user to top up
-    # cash when the actual answer is that this build cannot sell.
-    if not under and over:
-        names = ", ".join(f"{p['symbol']} +{p['driftBps']}bps" for p in over)
-        return None, (f"rebalancing requires selling ({names}); this build is "
-                      f"buy-only, so no leg is available")
-
-    if not under:
-        return None, "no position is below target with a usable price"
-
-    worst = min(under, key=lambda p: p["driftBps"])
-    gap_usd = (abs(worst["driftBps"]) / 10_000) * state["totalUsd"]
     remaining_cap = m["totalCapUsdc"] - m["spentUsdc"]
 
-    if remaining_cap <= 0:
-        return None, "total spend cap reached"
-    if state["usdcValueUsd"] <= 0:
-        shortfall = min(gap_usd, m["maxLegUsdc"], remaining_cap)
-        extra = (f"; selling {over[0]['symbol']} would fund it, but this build "
-                 f"is buy-only") if over else ""
-        return None, (f"{worst['symbol']} is {abs(worst['driftBps'])}bps below "
-                      f"target and needs about ${shortfall:.2f}, but the owner "
-                      f"holds no USDC{extra}")
+    if remaining_cap <= 0 and under and not over:
+        return None, (f"total spend cap reached "
+                      f"(${m['spentUsdc']:.2f} of ${m['totalCapUsdc']:.2f}); "
+                      f"buying is blocked and nothing is above target to sell")
 
-    size = min(gap_usd, m["maxLegUsdc"], remaining_cap, state["usdcValueUsd"])
-    if size < 0.01:
-        return None, f"computed leg size ${size:.4f} below the minimum"
+    blockers = []
+    for p in under:
+        need = min((abs(p["driftBps"]) / 10_000) * state["totalUsd"], m["maxLegUsdc"])
+        if state["usdcValueUsd"] < 0.01:
+            blockers.append(f"{p['symbol']} needs ~${need:.2f} but the owner "
+                            f"holds no USDC")
+        elif remaining_cap < 0.01:
+            blockers.append(f"{p['symbol']} needs ~${need:.2f} but the spend "
+                            f"cap has ${remaining_cap:.2f} left")
+        else:
+            blockers.append(f"{p['symbol']} leg sizes below the ${0.01:.2f} minimum")
+    for p in over:
+        blockers.append(f"{p['symbol']} is +{p['driftBps']}bps but its sellable "
+                        f"value is ${p['valueUsd'] or 0:.2f}")
 
-    return {"tokenIn": "USDC", "tokenInAddress": USDC,
-            "tokenOut": worst["symbol"], "tokenOutAddress": worst["address"],
-            "amountUsd": round(size, 6),
-            "driftBps": worst["driftBps"],
-            "reason": f"{worst['symbol']} is {abs(worst['driftBps'])}bps below target"}, None
+    return None, ("no admissible leg: " + "; ".join(blockers)) if blockers else (
+        None, "no admissible leg this cycle")
 
 
 def build_payload(leg):
@@ -247,7 +331,13 @@ def build_payload(leg):
     if not CONTRACT:
         return None, "no contract deployed; payload not requested"
 
-    amount = int(round(leg["amountUsd"] * 10 ** USDC_DECIMALS))
+    # A sell sends the rebasing token, so the amount is in that token's units,
+    # not USDC's. Getting this wrong would send a swap sized by a factor of 1e12.
+    if leg["direction"] == "buy":
+        amount = int(round(leg["amountUsd"] * 10 ** USDC_DECIMALS))
+    else:
+        tokens = leg["amountUsd"] / leg["priceUsd"]
+        amount = int(round(tokens * 10 ** leg["decimals"]))
     status, body, _ = okx_dex.endpoint("swap", {
         "amount": str(amount),
         "fromTokenAddress": leg["tokenInAddress"],
@@ -298,8 +388,12 @@ def main():
     leg, why_not = select_leg(m, state)
     payload, payload_err = (None, None)
     if leg:
-        print(f"\nLEG: buy {leg['tokenOut']} with ${leg['amountUsd']} USDC "
-              f"({leg['reason']})")
+        print(f"\nLEG: {leg['direction'].upper()} {leg['symbol']} "
+              f"${leg['amountUsd']:.2f}")
+        print(f"  {leg['reason']}")
+        for r in leg["rejected"]:
+            print(f"  rejected: {r['direction']} {r['symbol']} ${r['amountUsd']:.2f} "
+                  f"-> {r['distanceAfter']}bps (cuts {r['reductionBps']}bps)")
         payload, payload_err = build_payload(leg)
         if payload:
             print(f"  router {payload['to']}  gas {payload['gas']}")

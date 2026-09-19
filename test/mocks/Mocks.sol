@@ -150,6 +150,19 @@ contract MockRouter {
         if (dust > 0) IERC20(dustToken).transfer(msg.sender, dust);
     }
 
+    /// @dev Swaps, then calls an arbitrary target mid-transaction. Lets a fork
+    ///      test drive a real token's storage (a forced rebase) from inside the
+    ///      swap, which a mock cannot do to a deployed contract.
+    function swapThenCall(
+        address tokenIn, address tokenOut, uint256 pull, uint256 give,
+        address target, bytes calldata cd
+    ) external {
+        if (pull > 0) IERC20(tokenIn).transferFrom(msg.sender, address(this), pull);
+        if (give > 0) IERC20(tokenOut).transfer(msg.sender, give);
+        (bool ok,) = target.call(cd);
+        require(ok, "callback failed");
+    }
+
     function boom(string calldata reason) external pure {
         revert(reason);
     }

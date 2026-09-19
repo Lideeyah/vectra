@@ -268,6 +268,64 @@ contract VectraMandateTest is Test {
         assertEq(wrapper.balanceOf(owner), 0);
     }
 
+    // ------------------------------------------------- oscillation / churn
+
+    /// @notice The cap tracks cumulative USDC spent and a sell does not refund
+    ///         headroom, so buy-sell-buy would be unbounded activity under an
+    ///         untouched cap IF the direction rule permitted it. It does not:
+    ///         with no price movement, a token still above target cannot be
+    ///         bought. This asserts that rather than assuming it.
+    function test_SellThenImmediateRebuy_IsRefused() public {
+        // Sit above target so a sell is permitted.
+        nvda.mintShares(owner, TARGET_SHARES + 4e18);
+        usdc.mint(address(router), 100e6);
+
+        bytes memory sell = abi.encodeCall(
+            MockRouter.swap, (address(nvda), address(usdc), 1e18, 5e6)
+        );
+        vm.prank(agent);
+        vectra.execute(mandateId, address(nvda), address(usdc), 1e18, 5e6, sell, _none());
+
+        // Still above target after the sell, and no price has moved.
+        assertGt(nvda.sharesOf(owner), TARGET_SHARES, "should still be overweight");
+
+        bytes memory rebuy = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, 1e18)
+        );
+        vm.prank(agent);
+        vm.expectRevert(VectraMandate.WrongDirection.selector);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, rebuy, _none());
+    }
+
+    /// @notice The gap this exposes, asserted rather than hidden. The direction
+    ///         rule checks position BEFORE the leg, not after, so a single
+    ///         oversized sell can cross below target — and once below, a rebuy
+    ///         is permitted. Oscillation is therefore prevented only while legs
+    ///         are correctly sized, which is the agent's job, not the contract's.
+    function test_OversizedSellCrossesTarget_ThenRebuyIsPermitted_KnownGap() public {
+        nvda.mintShares(owner, TARGET_SHARES + 1e18);
+        usdc.mint(address(router), 100e6);
+
+        // Sell far more than the drift required: 5e18 against a 1e18 excess.
+        bytes memory sell = abi.encodeCall(
+            MockRouter.swap, (address(nvda), address(usdc), 5e18, 25e6)
+        );
+        vm.prank(agent);
+        vectra.execute(mandateId, address(nvda), address(usdc), 5e18, 25e6, sell, _none());
+
+        assertLt(nvda.sharesOf(owner), TARGET_SHARES, "overshot below target");
+
+        // Now underweight, so the contract permits a rebuy. Nothing here is
+        // wrong per the direction rule; the contract cannot bound sell SIZE
+        // without prices. Recorded as a known limitation.
+        bytes memory rebuy = abi.encodeCall(
+            MockRouter.swap, (address(usdc), address(nvda), 5e6, 1e18)
+        );
+        vm.prank(agent);
+        vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, rebuy, _none());
+        assertEq(nvda.balanceOf(address(vectra)), 0);
+    }
+
     // ------------------------------------------------------- access and caps
 
     function test_OnlyAgentCanExecute() public {
