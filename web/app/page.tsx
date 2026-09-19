@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { Convergence, type Row } from "@/components/Convergence";
+import { ConvergenceShape } from "@/components/ConvergenceShape";
 import { Proof } from "@/components/Proof";
 import { Refusals } from "@/components/Refusals";
 import { Rules, type MandateView } from "@/components/Rules";
@@ -99,6 +100,10 @@ export default function Page() {
   return (
     <div className="wrap" style={{ paddingTop: 48, paddingBottom: 80 }}>
       <Header />
+
+      {/* Before there is a position, the product shows its own shape rather
+          than a landing page. No values, only structure. */}
+      {phase.k !== "ready" && <ConvergenceShape />}
 
       {phase.k === "loading" && (
         <p className="dim mono" style={{ fontSize: 13 }}>reading chain…</p>
