@@ -99,8 +99,36 @@ jobs:
       - name: Export the Executed logs
         if: always()
         run: |
-          set -euo pipefail
+          # Deliberately NOT `set -u`. This step exists to report what happened,
+          # including when nothing did, and an unbound VECTRA from a failed seed
+          # must not kill the reporting — that is how the last run produced no
+          # output at all and left the failure invisible.
+          set +u
           mkdir -p data/dev
+
+          {
+            echo "# dev leg — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "contract: ${VECTRA:-<seed did not report one>}"
+            echo "mandate:  ${MANDATE:-<none>}"
+            echo
+            echo "## seed"
+            echo '```'
+            tail -40 /tmp/seed.log 2>/dev/null || echo "(no seed log — the step did not run)"
+            echo '```'
+            echo "## leg"
+            echo '```'
+            tail -60 /tmp/leg.log 2>/dev/null || echo "(no leg log — the step did not run)"
+            echo '```'
+          } > data/dev/run.md
+
+          if [ -z "${VECTRA:-}" ]; then
+            echo "no contract address — seed failed; diagnostics written to data/dev/run.md"
+            echo "[]" > data/dev/executed.json
+            echo "[]" > data/dev/targets_set.json
+            exit 0
+          fi
+
           SIG=$(cast sig-event "Executed(uint256,address,address,uint256,uint256,uint64)")
           echo "Executed topic: $SIG"
           cast logs "$SIG" --address "$VECTRA" --from-block 0 \
@@ -126,6 +154,8 @@ jobs:
         run: |
           git config user.name "Lydia Solomon"
           git config user.email "lydiasolomon137@gmail.com"
+          # data/dev/run.md is rewritten every run, so there is always
+          # something to commit and never a silent success.
           [ -z "$(git status --porcelain data/dev)" ] && echo "nothing new" && exit 0
           git add data/dev
           git commit -m "dev-leg: executed logs $(date -u +%Y-%m-%dT%H:%MZ)"
