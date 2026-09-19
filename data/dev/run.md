@@ -1,4 +1,4 @@
-# dev leg — 2026-09-19T19:51:53Z
+# dev leg — 2026-09-19T19:54:38Z
 
 contract: 0xc5a5C42992dECbae36851359345FE25997F5C42d
 mandate:  1
@@ -6,7 +6,7 @@ mandate:  1
 ## seed
 ```
 Compiling 26 files with Solc 0.8.24
-Solc 0.8.24 finished in 610.39ms
+Solc 0.8.24 finished in 802.56ms
 Compiler run successful!
 Script ran successfully.
 
@@ -24,13 +24,13 @@ Script ran successfully.
 
 Chain 196
 
-Estimated max fee per gas: 0.035021879 gwei
-Estimated base fee per gas: 0.017510939 gwei
+Estimated max fee per gas: 0.035020715 gwei
+Estimated base fee per gas: 0.017510357 gwei
 Estimated max priority fee per gas: 0.000000001 gwei
 
 Estimated total gas used for script: 3682220
 
-Estimated amount required: 0.00012895826329138 ETH
+Estimated amount required: 0.0001289539771873 ETH
 
 ==========================
 
@@ -52,9 +52,9 @@ Script ran successfully.
 == Logs ==
   owner USDC before 0
   owner shares before 7986413538835678659
-  owner USDC after 221892222
+  owner USDC after 221893838
   owner shares after 6988111846481218827
-  USDC gained 221892222
+  USDC gained 221893838
 
 ## Setting up 1 EVM.
 
@@ -62,13 +62,13 @@ Script ran successfully.
 
 Chain 196
 
-Estimated max fee per gas: 0.030647871 gwei
-Estimated base fee per gas: 0.015323935 gwei
+Estimated max fee per gas: 0.030646853 gwei
+Estimated base fee per gas: 0.015323426 gwei
 Estimated max priority fee per gas: 0.000000001 gwei
 
 Estimated total gas used for script: 1376241
 
-Estimated amount required: 0.000042178856632911 ETH
+Estimated amount required: 0.000042177455619573 ETH
 
 ==========================
 
