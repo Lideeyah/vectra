@@ -26,6 +26,7 @@ USDC = "0xb6ceceab302e2e4948951ee7843fc24e92933061"
 USDC_DECIMALS = 6
 LADDER = [1.0, 5.0, 10.0, 25.0, 50.0, 100.0]
 THROTTLE_S = 3.0
+THIN_TAIL_COUNT = 3   # worst-measured quotable assets, graded alongside the set
 OUT = Path("data/verifications/depth_curve.json")
 
 CONSTITUENTS = Path("data/constituents.json")
@@ -38,11 +39,26 @@ def default_tokens():
     figure in it carries whatever the underlying did between the two calls. The
     ladder replaces it: one pass per asset, no gap for price to move through.
     """
-    if CONSTITUENTS.exists():
-        c = json.loads(CONSTITUENTS.read_text())
-        return {x["symbol"]: x["address"] for x in c["constituents"]}
-    return {"MSTRx": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
-            "SPYx": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48"}
+    if not CONSTITUENTS.exists():
+        return {"MSTRx": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+                "SPYx": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48"}
+
+    c = json.loads(CONSTITUENTS.read_text())
+    tokens = {x["symbol"]: x["address"] for x in c["constituents"]}
+
+    # The thin tail is not in the recording set, but it carried the widest
+    # figures in the old depth column and supplies the spread that made the
+    # proportionality story persuasive. A run over the constituents alone would
+    # leave those numbers unmeasured rather than confirmed or killed, so the
+    # worst-measured quotable assets are graded alongside.
+    probe = Path("data/liquidity_probe.json")
+    if probe.exists():
+        entries = [e for e in json.loads(probe.read_text()).values()
+                   if e.get("quotable") and e.get("depthPct") is not None]
+        entries.sort(key=lambda e: -e["depthPct"])
+        for e in entries[:THIN_TAIL_COUNT]:
+            tokens.setdefault(e["symbol"], e["address"])
+    return tokens
 
 
 def original_depths():
