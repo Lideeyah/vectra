@@ -25,7 +25,7 @@ import xlayer
 NA = "NA"
 CADENCE_MIN = 5
 NOTIONAL_USD = 5.0
-RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "330"))
+RUN_MINUTES = int(os.environ.get("VECTRA_RUN_MINUTES", "170"))
 COMMIT_EVERY = int(os.environ.get("VECTRA_COMMIT_EVERY", "6"))  # buckets, ~30 min
 THROTTLE_S = 1.1
 

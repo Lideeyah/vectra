@@ -2,9 +2,11 @@ name: price recorder
 
 on:
   schedule:
-    # Every five minutes. GitHub queues rather than guarantees this; the recorder
-    # buckets by wall-clock time and dedupes, so a late run self-corrects.
-    - cron: "*/5 * * * *"
+    # Every fifteen minutes. This is a RESTART trigger, not the clock — the job
+    # records its own buckets internally. A */5 cron queued 288 pending runs a
+    # day into one concurrency group, each cancelling the last, and a healthy
+    # job was cancelled 3h44m into its run. Less churn, same coverage.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,7 @@ concurrency:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 190
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +39,10 @@ jobs:
           fi
 
       - name: Record
-        # Records its own buckets for 5.5 hours. GitHub caps a job at 6, and a
-        # long job means cron only has to fire a few times a day rather than
-        # 288 times — which it demonstrably does not do. Cut off runs still
-        # reach the commit step below.
-        timeout-minutes: 340
+        # Just under three hours. A 5.5 hour job was cancelled at 3h44m, so
+        # runs now finish well inside that window rather than betting on it.
+        # Cut off runs still reach the commit step below.
+        timeout-minutes: 180
         continue-on-error: true
         env:
           OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
