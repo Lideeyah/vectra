@@ -272,6 +272,14 @@ There is a second, cheaper guard for the common mistake: the deployed runtime's 
 
 The hash is identical across a from-scratch rebuild. **That hash is what verification is checked against**, and anyone can reproduce it from this repository at the pinned compiler, optimizer and EVM version without trusting the deployer. If a future rebuild disagrees with it, something in the toolchain has moved and the deployed address can no longer be reproduced from source — which is worth discovering before the address is immutable rather than after.
 
+> **The constructor arguments and the deployment hash are a matched pair.** The recorded hash is of the runtime code *with these arguments' immutables in place*, so it is valid only for exactly these three addresses. Change either without the other and the fork assertion starts failing for a reason that has nothing to do with the contract — which is the worst kind of failure, because it points at the code while the fault is in the record.
+>
+> **Regenerate both together, in one step, after the final contract change**, as the last action before deploying:
+>
+> 1. `rm -rf out cache && forge build` (default profile)
+> 2. deploy in-fork with the final arguments and read back `keccak(address.code)`
+> 3. update the arguments block, the hash, and `VECTRA_DEPLOY_HASH` in the caller-binding workflow — all three, or none
+
 **Constructor arguments**, ABI-encoded, for the verified addresses:
 
 ```
