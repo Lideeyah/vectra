@@ -28,12 +28,31 @@ LADDER = [1.0, 5.0, 10.0, 25.0, 50.0, 100.0]
 THROTTLE_S = 3.0
 OUT = Path("data/verifications/depth_curve.json")
 
-# Subject and control. MSTRx is the anomaly; SPYx measured the cleanest depth
-# in the set (0.0002%) and stands in for "known good".
-DEFAULT_TOKENS = {
-    "MSTRx": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
-    "SPYx": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
-}
+CONSTITUENTS = Path("data/constituents.json")
+
+
+def default_tokens():
+    """The whole recording set by default.
+
+    The original depth column came from two quotes taken seconds apart, so every
+    figure in it carries whatever the underlying did between the two calls. The
+    ladder replaces it: one pass per asset, no gap for price to move through.
+    """
+    if CONSTITUENTS.exists():
+        c = json.loads(CONSTITUENTS.read_text())
+        return {x["symbol"]: x["address"] for x in c["constituents"]}
+    return {"MSTRx": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+            "SPYx": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48"}
+
+
+def original_depths():
+    """The superseded two-quote figures, for the survives-or-drift comparison."""
+    probe = Path("data/liquidity_probe.json")
+    if not probe.exists():
+        return {}
+    return {e["symbol"]: e.get("depthPct")
+            for e in json.loads(probe.read_text()).values()
+            if e.get("depthPct") is not None}
 
 
 def quote_at(addr, usd, decimals=18):
@@ -123,7 +142,7 @@ def run(symbol, addr):
 
 
 def main():
-    tokens = dict(DEFAULT_TOKENS)
+    tokens = default_tokens()
     env = os.environ.get("VECTRA_TOKENS")
     if env:
         tokens = dict(pair.split("=", 1) for pair in env.split(",") if "=" in pair)
@@ -133,10 +152,43 @@ def main():
 
     results = [run(sym, addr) for sym, addr in tokens.items()]
 
+    # Which of the original depth figures survive, and which were drift.
+    old = original_depths()
+    print("\n" + "=" * 74)
+    print("ORIGINAL TWO-QUOTE DEPTH vs SINGLE-PASS LADDER")
+    print("=" * 74)
+    print(f"{'SYMBOL':<9} {'OLD $1->$50':>13} {'LADDER $1->$50':>16} "
+          f"{'$1->$100':>11}  VERDICT")
+    summary = []
+    for r in results:
+        ok = {x["usd"]: x for x in r["rows"] if x.get("ok")}
+        if 1.0 not in ok:
+            continue
+        base = ok[1.0]["rate"]
+        d50 = -((ok[50.0]["rate"] - base) / base * 100) if 50.0 in ok else None
+        d100 = -((ok[100.0]["rate"] - base) / base * 100) if 100.0 in ok else None
+        o = old.get(r["symbol"])
+        if o is None or d50 is None:
+            verdict = "no comparison"
+        elif abs(o - d50) <= 0.005:
+            verdict = "survives"
+        else:
+            verdict = f"DRIFT (off by {o - d50:+.4f}pp)"
+        summary.append({"symbol": r["symbol"], "originalDepthPct": o,
+                        "ladder50Pct": d50, "ladder100Pct": d100,
+                        "verdict": verdict})
+        print(f"{r['symbol']:<9} {('—' if o is None else f'{o:.4f}%'):>13} "
+              f"{('—' if d50 is None else f'{d50:.4f}%'):>16} "
+              f"{('—' if d100 is None else f'{d100:.4f}%'):>11}  {verdict}")
+
+    survived = sum(1 for s_ in summary if s_["verdict"] == "survives")
+    print(f"\n{survived} of {len(summary)} original figures survive; "
+          f"{len(summary) - survived} were drift.")
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "ladderUsd": LADDER, "results": results,
+        "ladderUsd": LADDER, "results": results, "comparison": summary,
     }, indent=2) + "\n")
     print(f"\nwritten to {OUT}")
     return 0 if any(r["verdict"] for r in results) else 1
