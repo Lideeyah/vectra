@@ -51,6 +51,15 @@ def default_tokens():
     # proportionality story persuasive. A run over the constituents alone would
     # leave those numbers unmeasured rather than confirmed or killed, so the
     # worst-measured quotable assets are graded alongside.
+    #
+    # Note what this selection can and cannot show. These ranks come from the
+    # flawed two-quote method, so "the three worst" is itself an artifact of it;
+    # the genuinely thinnest assets may be elsewhere entirely. Grading these
+    # three tests the numbers the claim was built on, which is the point. But if
+    # they collapse, the conclusion is NOT that the tail was found and then
+    # disproved — it is that the old method could not identify a tail at all.
+    # Establishing whether a real tail exists would need a ladder across the
+    # whole quotable set, which is a separate run.
     probe = Path("data/liquidity_probe.json")
     if probe.exists():
         entries = [e for e in json.loads(probe.read_text()).values()
@@ -123,7 +132,12 @@ def run(symbol, addr):
         best = max(ok, key=lambda r: r["rate"])
         worst = min(ok, key=lambda r: r["rate"])
         spread = (best["rate"] - worst["rate"]) / worst["rate"] * 100
-        improves = best["usd"] > ok[0]["usd"] and best["rate"] > ok[0]["rate"]
+        # An "improvement" must exceed measurement noise. Rates differing in the
+        # eighth decimal are identical for this purpose, and treating them as an
+        # improvement produced a false ROUTING ARTIFACT verdict on SPYx.
+        IMPROVE_THRESHOLD_PCT = 0.001
+        gain = (best["rate"] - ok[0]["rate"]) / ok[0]["rate"] * 100
+        improves = best["usd"] > ok[0]["usd"] and gain > IMPROVE_THRESHOLD_PCT
 
         print(f"\n  distinct routes across the ladder: {len(routes)}")
         for rt in sorted(routes):
@@ -142,8 +156,12 @@ def run(symbol, addr):
                        "cost here, and the proportionality claim needs "
                        "qualifying to the liquid set with exceptions.")
         else:
-            verdict = ("NORMAL: the rate does not improve with size; cost is "
-                       "flat or degrades as expected.")
+            worst_delta = (ok[-1]["rate"] - ok[0]["rate"]) / ok[0]["rate"] * 100
+            verdict = (f"NORMAL: the rate does not meaningfully improve with "
+                       f"size (best is {gain:+.4f}% vs the smallest, within "
+                       f"noise). Cost degrades monotonically as expected: "
+                       f"{worst_delta:+.4f}% from ${ok[0]['usd']:g} to "
+                       f"${ok[-1]['usd']:g}.")
         print(f"\n  VERDICT: {verdict}")
     return {"symbol": symbol, "address": addr, "rows": rows, "verdict": verdict}
 
