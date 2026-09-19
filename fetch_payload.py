@@ -21,12 +21,16 @@ NVDAX = "0xc845b2894dbddd03858fd2d643b4ef725fe0849d"
 USDC_DECIMALS = 6
 
 
-def fetch(wallet, token=NVDAX, usd=5.0, slippage="0.5"):
-    amount = int(round(usd * 10 ** USDC_DECIMALS))
+def fetch(wallet, from_token=USDC, to_token=NVDAX, amount=None, slippage="0.5"):
+    """Either direction. A SELL leg matters because it needs no USDC funding:
+    the owner already holds the rebasing token, so a fork can execute a real leg
+    without solving the problem of giving a test account stablecoins."""
+    if amount is None:
+        amount = int(round(5.0 * 10 ** USDC_DECIMALS))
     status, body, _ = okx_dex.endpoint("swap", {
         "amount": str(amount),
-        "fromTokenAddress": USDC,
-        "toTokenAddress": token,
+        "fromTokenAddress": from_token,
+        "toTokenAddress": to_token,
         "slippagePercent": slippage,
         "userWalletAddress": wallet,
     })
@@ -44,7 +48,8 @@ def fetch(wallet, token=NVDAX, usd=5.0, slippage="0.5"):
         "gas": tx.get("gas"),
         "minReceiveAmount": tx.get("minReceiveAmount"),
         "amountIn": str(amount),
-        "token": token,
+        "fromToken": from_token,
+        "toToken": to_token,
     }
 
 
@@ -53,7 +58,12 @@ def main():
     if not wallet:
         raise SystemExit("VECTRA_WALLET is required (the address the payload is built for)")
 
-    p = fetch(wallet, os.environ.get("VECTRA_TOKEN") or NVDAX)
+    p = fetch(
+        wallet,
+        from_token=os.environ.get("VECTRA_FROM") or USDC,
+        to_token=os.environ.get("VECTRA_TO") or NVDAX,
+        amount=int(os.environ["VECTRA_AMOUNT"]) if os.environ.get("VECTRA_AMOUNT") else None,
+    )
 
     # Anything a shell will `eval` or read into env, on stdout. Diagnostics go
     # to stderr so they cannot contaminate it.
@@ -61,7 +71,8 @@ def main():
     print(f"VECTRA_PAYLOAD_TO={p['to']}")
     print(f"VECTRA_PAYLOAD_MINOUT={p['minReceiveAmount']}")
     print(f"VECTRA_PAYLOAD_AMOUNTIN={p['amountIn']}")
-    print(f"VECTRA_PAYLOAD_TOKEN={p['token']}")
+    print(f"VECTRA_PAYLOAD_FROM={p['fromToken']}")
+    print(f"VECTRA_PAYLOAD_TO_TOKEN={p['toToken']}")
     # Wall-clock time the payload was issued. A fork pinned to a past block
     # carries that block's timestamp, which can sit behind the deadline the
     # router just issued against wall time — so the test warps to this before

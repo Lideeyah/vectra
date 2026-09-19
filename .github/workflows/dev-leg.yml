@@ -1,0 +1,122 @@
+name: dev leg
+
+# Executes a REAL leg against the REAL router on an anvil fork of X Layer, and
+# exports the Executed logs.
+#
+# The machine here is the point: OKX is unreachable from the development laptop
+# but reachable from an Actions runner, which the caller-binding work already
+# proved. So the leg that cannot be run locally runs here, and the interface
+# gets genuine event data of exactly the shape mainnet will produce — before the
+# mainnet mandate is funded.
+#
+# This is development data. It is committed under data/dev/ so it is never
+# mistaken for production, and the rendering code it exercises is the same code
+# that will render mainnet events unchanged.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-leg
+  cancel-in-progress: false
+
+jobs:
+  leg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Start anvil, forked from X Layer
+        run: |
+          anvil --fork-url https://rpc.xlayer.tech --port 8545 --silent &
+          for i in $(seq 1 60); do
+            cast chain-id --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "forked chain $(cast chain-id --rpc-url http://127.0.0.1:8545) at block $(cast block-number --rpc-url http://127.0.0.1:8545)"
+
+      - name: Deploy and seed a mandate that needs a sell
+        id: seed
+        run: |
+          set -euo pipefail
+          FOUNDRY_PROFILE=fork forge script script/DevLeg.s.sol --sig "setup()" \
+            --rpc-url http://127.0.0.1:8545 --broadcast --unlocked \
+            | tee /tmp/seed.log
+          echo "VECTRA=$(grep -oE 'VECTRA 0x[0-9a-fA-F]{40}' /tmp/seed.log | tail -1 | cut -d' ' -f2)" >> "$GITHUB_ENV"
+          echo "MANDATE=$(grep -oE 'MANDATE [0-9]+' /tmp/seed.log | tail -1 | cut -d' ' -f2)" >> "$GITHUB_ENV"
+          echo "OWNER=$(grep -oE 'OWNER 0x[0-9a-fA-F]{40}' /tmp/seed.log | tail -1 | cut -d' ' -f2)" >> "$GITHUB_ENV"
+
+      - name: Fetch a fresh payload and forward it, same job
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          NVDAX=0xc845b2894dbddd03858fd2d643b4ef725fe0849d
+          USDC=0xb6ceceab302e2e4948951ee7843fc24e92933061
+          AMOUNT_IN=1000000000000000000   # 1 NVDAx, in balance terms
+
+          # The payload is built for the CONTRACT, because the calldata encodes
+          # its caller — verified by the caller-binding run.
+          VECTRA_WALLET="$VECTRA" VECTRA_FROM="$NVDAX" VECTRA_TO="$USDC" \
+            VECTRA_AMOUNT="$AMOUNT_IN" python fetch_payload.py > /tmp/payload.env
+          set -a; . /tmp/payload.env; set +a
+
+          # minOut shaved: on a rebasing token an exact-quote minOut rounds a wei
+          # short and reverts every time.
+          MIN_OUT=$(( VECTRA_PAYLOAD_MINOUT - 1000 ))
+          echo "payload fetched; minOut ${VECTRA_PAYLOAD_MINOUT} -> using ${MIN_OUT}"
+
+          VECTRA="$VECTRA" MANDATE="$MANDATE" AMOUNT_IN="$AMOUNT_IN" \
+            MIN_OUT="$MIN_OUT" VECTRA_PAYLOAD="$VECTRA_PAYLOAD" \
+            FOUNDRY_PROFILE=fork forge script script/DevLeg.s.sol --sig "leg()" \
+            --rpc-url http://127.0.0.1:8545 --broadcast --unlocked | tee /tmp/leg.log
+
+      - name: Export the Executed logs
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p data/dev
+          SIG=$(cast sig-event "Executed(uint256,address,address,uint256,uint256,uint64)")
+          echo "Executed topic: $SIG"
+          cast logs "$SIG" --address "$VECTRA" --from-block 0 \
+            --rpc-url http://127.0.0.1:8545 --json > data/dev/executed.json || echo "[]" > data/dev/executed.json
+
+          TSIG=$(cast sig-event "TargetsSet(uint256,uint256[],uint256[],uint64,uint256)")
+          cast logs "$TSIG" --address "$VECTRA" --from-block 0 \
+            --rpc-url http://127.0.0.1:8545 --json > data/dev/targets_set.json || echo "[]" > data/dev/targets_set.json
+
+          python - <<'PY'
+          import json, pathlib
+          for name in ("executed", "targets_set"):
+              p = pathlib.Path(f"data/dev/{name}.json")
+              try:
+                  rows = json.loads(p.read_text() or "[]")
+              except json.JSONDecodeError:
+                  rows = []
+              print(f"{name}: {len(rows)} log(s)")
+          PY
+
+      - name: Commit the development event data
+        if: always()
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+          [ -z "$(git status --porcelain data/dev)" ] && echo "nothing new" && exit 0
+          git add data/dev
+          git commit -m "dev-leg: executed logs $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+          exit 1
