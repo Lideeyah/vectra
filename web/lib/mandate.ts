@@ -52,6 +52,24 @@ export async function readMandate(id: bigint): Promise<MandateView> {
   };
 }
 
+/** Real symbols, read from the tokens themselves. Never a hardcoded map. */
+export async function readSymbols(tokens: readonly Address[]): Promise<string[]> {
+  const erc20 = [
+    { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  ] as const;
+  return Promise.all(
+    tokens.map(async (t) => {
+      try {
+        return (await publicClient.readContract({
+          address: t, abi: erc20, functionName: "symbol",
+        })) as string;
+      } catch {
+        return `${t.slice(0, 6)}…${t.slice(-4)}`;
+      }
+    })
+  );
+}
+
 export async function readPosition(id: bigint) {
   const [tokens, current, target] = (await publicClient.readContract({
     address: VECTRA_ADDRESS,

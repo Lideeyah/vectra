@@ -12,7 +12,7 @@ import {
 } from "@/components/States";
 import { CHAIN, DATA_BASE, VECTRA_ADDRESS } from "@/lib/config";
 import { connect, contractDeployed, switchToXLayer, walletState } from "@/lib/chain";
-import { readActiveMandateOf, readMandate, readPosition } from "@/lib/mandate";
+import { readActiveMandateOf, readMandate, readPosition, readSymbols } from "@/lib/mandate";
 import { loadLatestCycle, type AgentCycle } from "@/lib/data";
 import { addr } from "@/lib/format";
 
@@ -27,7 +27,7 @@ type Phase =
   | { k: "not-deployed" }
   | { k: "rpc-error"; detail: string }
   | { k: "no-mandate"; owner: Address }
-  | { k: "ready"; owner: Address; id: bigint; m: MandateView; rows: Row[] };
+  | { k: "ready"; owner: Address; id: bigint; m: MandateView; rows: Row[]; readOnly?: boolean };
 
 export default function Page() {
   const [phase, setPhase] = useState<Phase>({ k: "loading" });
@@ -35,6 +35,34 @@ export default function Page() {
 
   const load = useCallback(async () => {
     setPhase({ k: "loading" });
+
+    // Read-only inspection of a real mandate by address. Mandates are public
+    // chain state, so this shows the same reads a connected owner sees, without
+    // a wallet. It is not a demo mode: there is no simulated data behind it, and
+    // no write is possible from this path.
+    const viewing =
+      typeof window !== "undefined"
+        ? (new URLSearchParams(window.location.search).get("owner") as Address | null)
+        : null;
+
+    if (viewing) {
+      if (!(await contractDeployed(VECTRA_ADDRESS))) return setPhase({ k: "not-deployed" });
+      try {
+        const id = await readActiveMandateOf(viewing);
+        if (id === 0n) return setPhase({ k: "no-mandate", owner: viewing });
+        const [m, pos] = await Promise.all([readMandate(id), readPosition(id)]);
+        const symbols = await readSymbols(pos.tokens);
+        return setPhase({
+          k: "ready", owner: viewing, id, m, readOnly: true,
+          rows: pos.tokens.map((t, i) => ({
+            symbol: symbols[i], address: t,
+            current: pos.current[i], target: pos.target[i],
+          })),
+        });
+      } catch (e) {
+        return setPhase({ k: "rpc-error", detail: e instanceof Error ? e.message : String(e) });
+      }
+    }
 
     const w = await walletState();
     if (w.kind === "none") return setPhase({ k: "no-wallet" });
@@ -50,8 +78,9 @@ export default function Page() {
       if (id === 0n) return setPhase({ k: "no-mandate", owner: w.address });
 
       const [m, pos] = await Promise.all([readMandate(id), readPosition(id)]);
+      const symbols = await readSymbols(pos.tokens);
       const rows: Row[] = pos.tokens.map((t, i) => ({
-        symbol: addr(t),
+        symbol: symbols[i],
         address: t,
         current: pos.current[i],
         target: pos.target[i],
@@ -117,6 +146,19 @@ export default function Page() {
 
       {phase.k === "ready" && (
         <>
+          {phase.readOnly && (
+            <div
+              style={{
+                border: "1px solid var(--bone-12)", padding: "10px 14px",
+                marginBottom: 24, fontSize: 12,
+              }}
+              className="dim"
+            >
+              Read-only view of <span className="mono">{addr(phase.owner)}</span>.
+              Every figure below is a live contract read; no wallet is connected
+              and nothing can be signed from here.
+            </div>
+          )}
           {unfunded && <UnfundedMandate />}
           <Convergence rows={phase.rows} toleranceBps={phase.m.driftBps} />
           <Refusals cycle={cycle} stale={stale} />
@@ -153,3 +195,4 @@ function Mark() {
     </svg>
   );
 }
+

@@ -6,3 +6,9 @@ __pycache__/
 cache/
 out/
 broadcast/
+
+# Guard at the root as well as in web/: relying on a single ignore file is
+# how 19,601 dependency files nearly reached the repository.
+node_modules/
+.next/
+out-cancun/

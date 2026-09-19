@@ -6,7 +6,9 @@
 export const CHAIN = {
   id: 196,
   name: "X Layer",
-  rpc: "https://rpc.xlayer.tech",
+  // Overridable so the interface can be pointed at a local anvil fork of X
+  // Layer for development. The chain id stays 196 because the fork IS X Layer.
+  rpc: process.env.NEXT_PUBLIC_RPC ?? "https://rpc.xlayer.tech",
   explorer: "https://www.oklink.com/x-layer",
   currency: { name: "OKB", symbol: "OKB", decimals: 18 },
 } as const;
