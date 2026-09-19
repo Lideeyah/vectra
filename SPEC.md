@@ -181,6 +181,18 @@ No limit is placed on how far a target may move, and no cooldown is imposed. A m
 
 View functions for mandate state, cumulative spend, and holdings relative to target in token units.
 
+### 5.2.2 Deployment notes: the `mandate()` view shape
+
+Fixed at deployment and unchangeable, so recorded here from the source rather than left to inference by anything built later.
+
+`mandate(uint256 id)` returns a **10-tuple**, in this order:
+
+`(address owner, address agent, uint64 expiry, bool paused, bool revoked, uint16 driftBps, uint256 maxLegUsdc, uint256 totalCapUsdc, uint256 spentUsdc, uint64 version)`
+
+`version` was appended when target auditability was added, taking the arity from 9 to 10. That is a breaking change to a public view, and it broke positional destructuring in three test files when it landed — harmless then because nothing else consumed it, and impossible later because the contract is immutable.
+
+**Rule for the frontend and for any indexer: read `mandate()` by named component, never positionally.** Positional reads are how an arity change becomes a silent type-level failure rather than a loud one.
+
 ### 5.3 What is deliberately absent
 
 No upgradeability, no proxy, no admin role, no pause-everything switch, no fee mechanism, no loops over unbounded arrays, no delegatecall, no receiving ETH, and no price oracle. Basket size is capped at ten tokens.

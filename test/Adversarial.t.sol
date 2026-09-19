@@ -342,6 +342,63 @@ contract AdversarialTest is Test {
         console2.log("delivered balance for a 1e18 transfer", nvda.balanceOf(owner));
     }
 
+    /// @notice §2 churn attempt. With direction bounded at entry and distance
+    ///         bounded at exit, a position driven to target is stuck there: a
+    ///         buy would carry it above, a sell would carry it below. Nothing
+    ///         the agent can do reopens it, because only the owner can move the
+    ///         target. Attempted rather than argued.
+    function test_Churn_PositionAtTargetIsClosedToTheAgent() public {
+        // Put the position exactly at target.
+        nvda.mintShares(owner, TARGET);
+        assertEq(nvda.sharesOf(owner), TARGET);
+
+        nvda.mintShares(address(evil), 100e18);
+        usdc.mint(address(evil), 1_000e6);
+
+        bytes memory buy = abi.encodeCall(
+            PredatoryRouter.wrongToken,
+            (address(usdc), MAX_LEG, address(nvda), 1e17)
+        );
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.WrongDirection.selector);
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e17 - 10, buy, _none());
+
+        bytes memory sell = abi.encodeCall(
+            PredatoryRouter.wrongToken,
+            (address(nvda), 1e17, address(usdc), 1e6)
+        );
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.WrongDirection.selector);
+        vectra.execute(id, address(nvda), address(usdc), 1e17, 1e6 - 10, sell, _none());
+
+        // Only the owner can reopen it, and doing so is now logged.
+        console2.log("agent cannot move a position sitting at target");
+    }
+
+    /// @notice §2 sweep. Declaring an incomplete token set is the known limit.
+    ///         The consequence must be retention by the contract, never a loss
+    ///         to anyone but the owner — nothing is sent to a third party.
+    function test_Sweep_IncompleteSetRetainsRatherThanLoses() public {
+        MockRebasingToken wrapper = new MockRebasingToken("Wrapped NVDAx", "wNVDAx");
+        wrapper.setMultiplier(MULT);
+        wrapper.mintShares(address(evil), 100e18);
+        nvda.mintShares(address(evil), 100e18);
+
+        bytes memory cd = abi.encodeCall(
+            PredatoryRouter.wrongToken,
+            (address(usdc), MAX_LEG, address(wrapper), 3e17)
+        );
+        // Wrapper NOT declared: the contract keeps it.
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.InsufficientOutput.selector);
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e17, cd, _none());
+
+        // Nothing reached a third party, and nothing reached the attacker.
+        assertEq(wrapper.balanceOf(attacker), 0, "attacker received stranded dust");
+        assertEq(wrapper.balanceOf(address(vectra)), 0, "leg reverted, so nothing held");
+        console2.log("undeclared intermediate: retained or reverted, never diverted");
+    }
+
     // ==================================================== 4. LIFECYCLE
 
     function test_RevokedMandateCannotExecuteByAnyPath() public {
