@@ -12,7 +12,7 @@ optimizer_runs = 200
 evm_version = "paris"
 via_ir = false
 # Fork tests need --fork-url xlayer and are excluded from the default run.
-no_match_path = "test/ForkXLayer.t.sol"
+no_match_path = "test/(ForkXLayer|RealRouter).t.sol"
 fs_permissions = [{ access = "read", path = "./data" }]
 
 [rpc_endpoints]

@@ -545,6 +545,25 @@ The agent therefore reads those timestamps each cycle and refuses to trade any t
 
 ---
 
+## 14A. THE ROUTER ENFORCES A DEADLINE
+
+Forwarding the recorded payload to the real router on a fork reverts with **`Route: expired`**, and so does calling it directly from the wallet it was built for. The router carries a deadline in its calldata and enforces it.
+
+Two consequences.
+
+**"The agent never fires without a fresh quote from the current cycle" is enforced, not merely good practice.** A stale payload does not execute at a stale price; it does not execute at all. That removes a whole class of concern about replay and about a queued leg landing late.
+
+**The caller-binding question is not yet answered, and the deadline is what blocks it.** Whether a payload built for one address works when forwarded by another is still an inference from the `userWalletAddress` parameter, because expiry fires first and masks it. Answering it requires a *fresh* payload built for the contract's own address — which cannot be requested until the contract has an address.
+
+**This reorders the deployment sequence, and favourably.** The contract can be deployed before it is trusted: it holds no funds, has no admin key, and is inert until someone grants it an allowance and creates a mandate. So:
+
+1. Deploy, and verify on OKLink against the recorded bytecode hash.
+2. Request a swap payload with `userWalletAddress` set to the **deployed address**.
+3. Fork mainnet at the current block and forward that fresh payload through the deployed contract.
+4. Only then fund a mandate.
+
+Step 3 answers the caller-binding question against the real router with a live payload, and it happens **before any user funds anything**. A deployment that turns out to be unusable costs the gas and nothing else.
+
 ## 15. BUILD ORDER
 
 Verifications first. Then the contract, tested against a Foundry fork of X Layer mainnet with real xStocks and real routing, including a forced rebase to confirm nothing caches a balance. Then the agent against the deployed contract on a live mandate funded with a few dollars. Then the frontend. Then the adversarial audit. Then the demo recording.
