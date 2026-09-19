@@ -432,6 +432,104 @@ contract AdversarialTest is Test {
         console2.log("owner retargeted to current position:", current);
     }
 
+    /// @notice An agent named on one mandate must not reach another.
+    function test_AgentOfOneMandateCannotExecuteAnother() public {
+        address other = address(0xBEE5);
+        usdc.mint(other, 1_000e6);
+        vm.startPrank(other);
+        usdc.approve(address(vectra), type(uint256).max);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(nvda);
+        uint16[] memory w = new uint16[](1);
+        w[0] = 10_000;
+        uint256[] memory t = new uint256[](1);
+        t[0] = TARGET;
+        uint256 otherId = vectra.createMandate(VectraMandate.MandateParams({
+            tokens: tokens, weightsBps: w, targetShares: t, driftBps: 500,
+            maxLegUsdc: MAX_LEG, totalCapUsdc: TOTAL_CAP,
+            expiry: uint64(block.timestamp + 30 days), agent: address(0xF00D)
+        }));
+        vm.stopPrank();
+
+        bytes memory cd = abi.encodeCall(PredatoryRouter.noop, ());
+        vm.prank(attacker);            // agent of `id`, not of `otherId`
+        vm.expectRevert(VectraMandate.NotAgent.selector);
+        vectra.execute(otherId, address(usdc), address(nvda), MAX_LEG, 0, cd, _none());
+    }
+
+    function test_OnlyOwnerMayResumeAndAmend() public {
+        vm.prank(owner);
+        vectra.pause(id);
+
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.NotOwner.selector);
+        vectra.resume(id);
+
+        uint256[] memory t = new uint256[](2);
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.NotOwner.selector);
+        vectra.amendTargets(id, t);
+
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.NotOwner.selector);
+        vectra.amendCaps(id, 1e6, 1e6);
+    }
+
+    /// @notice Expiry is a strict boundary: at the expiry second the mandate is
+    ///         already dead, not dying.
+    function test_ExpiryIsInclusiveOfTheExpirySecond() public {
+        (, , uint64 expiry,,,,,,,) = vectra.mandate(id);
+        bytes memory cd = abi.encodeCall(PredatoryRouter.noop, ());
+
+        vm.warp(uint256(expiry) - 1);
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.InsufficientOutput.selector);   // alive: fails later
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
+
+        vm.warp(uint256(expiry));
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.MandateInactive.selector);      // dead at expiry
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
+    }
+
+    /// @notice A validator may shift block.timestamp within its tolerance. The
+    ///         consequence is bounded and stated: the mandate's effective life
+    ///         moves by that tolerance, seconds against a horizon of days.
+    function test_TimestampManipulationMovesExpiryOnlyByTheTolerance() public {
+        (, , uint64 expiry,,,,,,,) = vectra.mandate(id);
+        bytes memory cd = abi.encodeCall(PredatoryRouter.noop, ());
+
+        // A validator pulling the clock back by 12 seconds keeps it alive.
+        vm.warp(uint256(expiry) - 12);
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.InsufficientOutput.selector);
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
+
+        // Pushing it forward kills it early. Both bounded by the same seconds.
+        vm.warp(uint256(expiry) + 12);
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.MandateInactive.selector);
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
+
+        console2.log("expiry horizon (days)", (uint256(expiry) - 1) / 1 days);
+        console2.log("manipulation window (seconds)", uint256(12));
+    }
+
+    function test_PausedThenResumedByOwnerWorks() public {
+        vm.prank(owner);
+        vectra.pause(id);
+        bytes memory cd = abi.encodeCall(PredatoryRouter.noop, ());
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.MandateInactive.selector);
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 0, cd, _none());
+
+        vm.prank(owner);
+        vectra.resume(id);
+        vm.prank(attacker);
+        vm.expectRevert(VectraMandate.InsufficientOutput.selector);  // alive again
+        vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
+    }
+
     // ==================================================== 5. CONSTRUCTION
 
     function test_CannotReceiveNativeToken() public {

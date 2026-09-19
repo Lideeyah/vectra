@@ -197,6 +197,14 @@ Fixed at deployment and unchangeable, so recorded here from the source rather th
 
 **Rule for the frontend and for any indexer: read `mandate()` by named component, never positionally.** Positional reads are how an arity change becomes a silent type-level failure rather than a loud one.
 
+### 5.2.3 Timestamp dependence, and its stated consequence
+
+Expiry is enforced against `block.timestamp` on every path that could execute, as a strict boundary: at the expiry second the mandate is already dead, not dying.
+
+A validator can shift `block.timestamp` within its tolerance, on the order of seconds. The consequence is therefore bounded and worth stating rather than waving away: **the mandate's effective life can move by that tolerance and no further** — seconds against a horizon measured in days. A validator can end a mandate a few seconds early or keep it alive a few seconds longer.
+
+Nothing else in the contract reads the clock. There is no auction, no deadline-sensitive pricing, no time-weighted accounting, and no path where a few seconds changes what a leg is permitted to do. The only quantity exposed to the manipulation is the moment the mandate stops working, and a user who cares about that boundary can revoke rather than wait for expiry.
+
 ### 5.3 What is deliberately absent
 
 No upgradeability, no proxy, no admin role, no pause-everything switch, no fee mechanism, no loops over unbounded arrays, no delegatecall, no receiving ETH, and no price oracle. Basket size is capped at ten tokens.
@@ -538,6 +546,10 @@ Recorded as they are found, so the document does not quietly diverge from what i
 That makes the contrast stronger than the original claim, not weaker, and it is the honest version: the deep names are effectively free at any size, and the thin ones are not. The product's case does not require every xStock to be cheap. It requires the constituents to be, and all fourteen are — the worst of them, ASMLx, costs 0.0073% for a hundredfold size increase.
 
 **The route changes above $25 without improving the rate.** Both assets switch from `Uniswap V4` to `JIT Router` at $50 and $100, and the rate continues to degrade across the switch. Worth knowing for the agent's route sanity check: a route change is normal at size and is not by itself a signal.
+
+**Every edit that changes behaviour needs a test that fails before it and passes after, run in that order.** A string replacement for the share-probe loop silently failed to match. The contract compiled, and every affected test failed only by accident, with an array out-of-bounds from an empty array rather than anything describing the real problem. A successful build is not evidence that a change landed, and a suite that was already green cannot tell you either — it can only tell you nothing got worse.
+
+This is the same shape as the findings below and it generalises the same way: run the test first and watch it fail, so that the pass afterwards means something. Without the failing run, a green suite is consistent with the edit having done nothing at all.
 
 **A measurement that cannot separate its subject from its method.** Two findings in this build share a shape, and it is worth naming as a class rather than twice as incidents. The mock rebasing token used a multiplier of exactly 1e18, so it could not exhibit the share-conversion rounding it existed to model, and a real invariant violation stayed invisible until a fork test. The depth probe took its two quotes seconds apart, so it could not separate slippage from price movement, and reported the sum as though it were the former. In both cases the instrument produced clean, plausible, wrong numbers, and in neither case did anything about the output signal the problem. The guard is to ask what an instrument would produce if the effect being measured were absent — a unit multiplier, a motionless price — and check that the answer is distinguishable from a real reading.
 
