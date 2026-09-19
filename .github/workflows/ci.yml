@@ -1,0 +1,75 @@
+name: ci
+
+# Drift detectors that only run when someone remembers to run them are the same
+# shape as every other finding in this repository: a check that cannot fail.
+# These run on every push.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Build (deployment profile)
+        run: forge build
+      - name: Test
+        run: forge test
+
+  selectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet "eth-hash[pycryptodome]"
+      # Every hand-encoded selector, checked against its signature. The agent
+      # builds calldata positionally, which is the same exposure that let a
+      # transposed ABI tuple survive every contract test.
+      - name: Selectors match their signatures
+        run: python tools/check_selectors.py
+      - name: Agent decision tests
+        run: python test_agent_selection.py
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+
+      # The ABI is generated from the compiled artifact, so the artifact has to
+      # exist before it can be checked against.
+      - name: Build the contract
+        run: forge build
+
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      # THE DRIFT DETECTOR. A hand-written ABI once had expiry and
+      # maxLegBpsOfTarget transposed, which changed the createMandate selector
+      # and made every call revert with empty data. No contract test could catch
+      # it, because Solidity initialises structs by name and an ABI is
+      # positional — everything on one side of that boundary agreed with itself.
+      - name: ABI matches the compiled artifact
+        working-directory: web
+        run: node scripts/gen-abi.mjs --check
+
+      - name: Typecheck
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: web
+        run: npm run build
