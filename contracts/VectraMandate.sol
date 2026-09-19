@@ -137,6 +137,7 @@ contract VectraMandate is ReentrancyGuard {
     error WrongDirection();
     error InsufficientOutput();
     error ContractRetainedFunds();
+    error Overshoot();
 
     constructor(address router_, address spender_, address usdc_) {
         if (router_ == address(0) || spender_ == address(0) || usdc_ == address(0)) {
@@ -265,6 +266,14 @@ contract VectraMandate is ReentrancyGuard {
         (uint256 received, uint256 leftover) =
             _settle(owner_, tokenIn, tokenOut, minOut, sweep);
 
+        // The direction rule alone reads position BEFORE the leg, so it bounds
+        // which way a trade may go but not how far. Without this, a single
+        // oversized leg could cross the target and legitimise a reversal, and
+        // oscillation would be prevented only while the agent sized legs
+        // correctly. That would make the contract trust the agent, which is
+        // the thing putting the mandate on chain exists to avoid.
+        _checkPostState(m, tokenIn, tokenOut);
+
         if (tokenIn == usdc) {
             // Cap counts what was actually spent, not what was requested.
             m.spentUsdc += amountIn - leftover;
@@ -313,6 +322,33 @@ contract VectraMandate is ReentrancyGuard {
         for (uint256 i; i < n; ++i) {
             if (IERC20(sweep[i]).balanceOf(address(this)) > DUST_WEI) {
                 revert ContractRetainedFunds();
+            }
+        }
+    }
+
+    /**
+     * @dev A leg may move a position toward its target but must not carry it
+     *      past. Checked in share terms, the quantity invariant under a rebase,
+     *      so no oracle is needed — the same insight the entry-side direction
+     *      rule rests on, applied to the other end of the transaction.
+     *
+     *      DUST_WEI of slack absorbs the share-conversion rounding described at
+     *      its declaration. At 18 decimals that is ~1e-15 of a token, far below
+     *      any economically meaningful overshoot.
+     */
+    function _checkPostState(Mandate storage m, address tokenIn, address tokenOut)
+        private
+        view
+    {
+        if (tokenIn == usdc) {
+            uint256 idx = _indexOf(m, tokenOut);
+            if (_shares(tokenOut, m.owner) > m.targetShares[idx] + DUST_WEI) {
+                revert Overshoot();
+            }
+        } else {
+            uint256 idx = _indexOf(m, tokenIn);
+            if (_shares(tokenIn, m.owner) + DUST_WEI < m.targetShares[idx]) {
+                revert Overshoot();
             }
         }
     }

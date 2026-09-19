@@ -94,6 +94,14 @@ The user grants an ERC-20 allowance to the contract for each token in the basket
 
 If the contract is completely broken, the worst case is bounded by the allowance one user granted. For the demo that is a few dollars. This single design choice is worth more than every other safety measure combined.
 
+**Exact zero is not reachable on a rebasing token, and the invariant is bounded accordingly.** `balanceOf` is derived by integer division from shares — `shares * multiplier / 1e18` — so transferring the full balance converts back to shares with a rounding-down step and can leave a wei behind. Asserting an exact zero therefore reverts on correct behaviour.
+
+The invariant is `balanceOf(contract) <= DUST_WEI` where `DUST_WEI` is 1000: roughly 1e-15 of an 18-decimal token, fractions of a nanocent. It is a **ceiling, not an allowance** — nothing in the contract may deliberately retain anything, and the bound exists solely to tolerate a rounding artifact that cannot be engineered away at the ERC-20 interface.
+
+This was found by a fork test against real NVDAx at multiplier 1.0017. The mock suite never caught it because the mock's multiplier is exactly 1e18 and does not round. Observed residual on a real under-consumed sell: **1 wei**. It would have surfaced on the first mainnet leg, on the buy side as readily as the sell side.
+
+The general lesson is recorded because it generalises: a model of a rebasing token with a unit multiplier is not a model of a rebasing token.
+
 ### 5.2 Contract surface
 
 `createMandate(address[] tokens, uint16[] weightsBps, uint16 driftBps, uint256 maxLegUsdc, uint256 totalCapUsdc, uint64 expiry, address agent)`
@@ -110,7 +118,8 @@ The contract therefore bounds the **size and direction** of trades, and leaves t
 - the caller is the named agent
 - `tokenIn` and `tokenOut` are both either USDC or members of the basket, and are not the same token
 - when spending USDC, `amountIn` is at or below `maxLegUsdc`, and cumulative USDC spend after this leg is at or below `totalCapUsdc`
-- **direction**: USDC may only be spent to buy a token whose current holding is below its target share of the basket, measured in the token's own units against the last recorded target, and a basket token may only be sold when its holding is above target
+- **direction**: USDC may only be spent to buy a token whose share balance is below its target, and a basket token may only be sold when its share balance is above target
+- **distance**: after the swap, the position must not have crossed its target — a buy may not leave shares above target, a sell may not leave them below. Checked in share terms, so no oracle is required
 
 The direction rule is what survives the absence of prices. It does not prove the leg is optimal, and a compromised agent retains freedom to choose a suboptimal but still corrective leg. What it forecloses is the unbounded case: the agent cannot churn the position back and forth, cannot buy what is already at or above target, and cannot spend beyond the cap. That is a weaker guarantee than "every action reduces distance from target", and the difference is stated here rather than glossed.
 
@@ -132,9 +141,13 @@ Concretely: a $50 cap with $50 spent is exhausted. Selling $20 back to USDC does
 
 **The churn objection, and why it does not bite.** A cap that never decreases, combined with an agent that can sell, appears to permit unbounded activity: buy, sell, buy again, all under an untouched cap. It does not, because every leg must move a position *toward* target, and a buy immediately following a sell of the same token moves it away. This is asserted rather than assumed — `test_SellThenImmediateRebuy_IsRefused` sells a still-overweight position and confirms the rebuy reverts with `WrongDirection`.
 
-**The gap that assertion exposed.** The direction rule tests the position *before* the leg, not after, and the contract cannot bound a sell's size because sizing in USD needs a price. So a single oversized sell can cross below target, and once below, a rebuy is legitimately permitted. Oscillation is therefore prevented only while legs are correctly sized — which is the agent's responsibility, not the contract's. `test_OversizedSellCrossesTarget_ThenRebuyIsPermitted_KnownGap` asserts this rather than hiding it.
+**The gap that assertion exposed, and its closure.** The entry-side direction rule tests the position *before* the leg, so it bounds which way a trade may go but not how far. A single oversized sell could therefore cross below target, and once below, a rebuy became legitimate. Oscillation would have been prevented only while the agent sized legs correctly.
 
-The fix, if it is wanted, is cheap and needs no oracle: require post-state `sharesOf` to remain on the correct side of `targetShares`, which is checkable in share terms. It is not implemented here because it changes the contract's guarantee surface, and that is a decision to take deliberately rather than inside a leg-selection change.
+That was not acceptable. A check which holds only when the agent behaves correctly returns exactly the trust that putting the mandate on chain exists to remove, and the contract is immutable with no admin key, so deploying without the fix would have fixed the weaker guarantee for the life of the product.
+
+The contract therefore also checks **post-state**: after the swap, a buy may not leave shares above target and a sell may not leave them below. This needs no oracle because it is expressed in `sharesOf`, the quantity invariant under a rebase — the same insight the entry-side rule rests on, applied to the other end of the transaction. `DUST_WEI` of slack absorbs the share-conversion rounding described in 5.1.
+
+Target can no longer be crossed, so a reversal can never be legitimised, and oscillation is bounded by the contract rather than by the agent behaving. `test_OversizedSellIsRefused_TargetCannotBeCrossed` asserts the oversized sell reverts, that a correctly sized one still succeeds, and that the rebuy remains refused; `test_OversizedBuyIsRefused` covers the same bound on the buy side.
 
 **Every leg has USDC on one side.** Token-to-token legs are rejected. Beyond removing an unbounded-churn surface, this means cap accounting is always denominated in the unit the cap is written in. No conversion, no oracle, no ambiguity about what "spent" means.
 
@@ -305,9 +318,11 @@ Pause stops the agent immediately. Revoke ends the mandate permanently. Separate
 
 These must hold and must be tested.
 
-The contract's balance of every token is zero at the end of every transaction.
+USDC may only be spent to buy a basket token currently below its target share, and a basket token may only be sold when currently above it. *(The checkable form of "no leg makes things worse". The contract enforces direction, not optimality — see 5.2.)*
 
-USDC may only be spent to buy a basket token currently below its target share, and a basket token may only be sold when currently above it. *(This is the checkable form of "no leg makes things worse". The contract enforces direction, not optimality — see 5.2.)*
+No leg may carry a position past its target: after a buy, shares are at or below target; after a sell, at or above. Direction and distance are both bounded, so oscillation cannot be manufactured by oversizing a leg.
+
+The contract's balance of every token involved in a call is at most `DUST_WEI` at the end of it. Exact zero is unreachable on a rebasing token — see 5.1.
 
 Cumulative USDC spend never exceeds the mandate's cap.
 
@@ -453,8 +468,6 @@ Recorded as they are found, so the document does not quietly diverge from what i
 **The universe is much larger than assumed.** X Layer lists hundreds of xStocks. Section 9.1's "pick from available xStocks" is not a workable interface at that scale, and "choose ten by liquidity" is no longer an obvious selection rule. This strengthens section 2A's position that baskets should be defined indices, and that decision should be taken with the liquidity probe results in hand.
 
 **OKX's edge rejects default HTTP clients.** Requests carrying a library default user agent are refused by Cloudflare with error 1010 before reaching the API. Clients must send ordinary browser headers. If this escalates to TLS fingerprinting, the correct response is to adopt OKX's own SDK rather than push further against the edge.
-
-**Exact zero is not reachable on a rebasing token.** `balanceOf` is derived by integer division from shares, so transferring the full balance rounds the share conversion down and can leave a wei behind. The zero-balance invariant is therefore bounded by `DUST_WEI = 1000` rather than asserted as exact — roughly 1e-15 of a token, a ceiling rather than an allowance. Found by a fork test against real NVDAx at multiplier 1.0017; the mocks never caught it because their multiplier is exactly 1e18 and does not round. Observed residual on a real sell: **1 wei**.
 
 **Depth is measured, not read from a field.** The aggregator returns `priceImpactPercentage` as null on this chain, so the original plan to rank constituents by reported price impact could not work. Depth is instead observed directly: quote the same token at one dollar and at fifty, and read how far the rate degrades between them. This is a better method than the one it replaces, not merely a workaround — it is a direct observation of what the book does under size, rather than a number the venue reports about itself, and it cannot be misreported. The same technique settled the price-unit question on Gapless.
 
