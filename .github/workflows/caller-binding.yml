@@ -19,7 +19,7 @@ on:
         default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: caller-binding
@@ -72,6 +72,39 @@ jobs:
             FORK_ARGS="$FORK_ARGS --fork-block-number ${{ inputs.fork_block }}"
           fi
 
+          # The OUTCOME is durable and worth committing; the PAYLOAD is
+          # perishable and must not be. Capture the test output, strip anything
+          # carrying calldata, and commit only the verdict.
+          set +e
           FOUNDRY_NO_MATCH_PATH= forge test \
             --match-path "test/fork/CallerBinding.t.sol" \
-            $FORK_ARGS -vv
+            $FORK_ARGS -vv 2>&1 | tee /tmp/result.log
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          mkdir -p data/verifications
+          {
+            echo "# Caller binding"
+            echo
+            echo "- ran: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "- address: ${VECTRA_WALLET}"
+            echo "- fork block: ${{ inputs.fork_block || 'latest' }}"
+            echo "- exit: ${RC} ($([ $RC -eq 0 ] && echo PASS || echo FAIL))"
+            echo
+            echo '```'
+            grep -vE "VECTRA_PAYLOAD=|0x[0-9a-fA-F]{200,}" /tmp/result.log \
+              | grep -E "^\s*(\[PASS|\[FAIL|Suite result|Ran |  )" | head -40
+            echo '```'
+          } > data/verifications/caller_binding.md
+
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+          git add data/verifications/caller_binding.md
+          git commit -m "caller-binding: $([ $RC -eq 0 ] && echo pass || echo fail) $(date -u +%Y-%m-%dT%H:%MZ)" || true
+          for i in 1 2 3; do
+            git push && break
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+
+          exit $RC
