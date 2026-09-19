@@ -1,0 +1,29 @@
+{
+  "source": "anvil fork of X Layer, real OKX router \u2014 development data",
+  "legs": [
+    {
+      "id": "1",
+      "tokenIn": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "tokenOut": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "amountIn": "1000000000000000000",
+      "amountOut": "221893838",
+      "version": 1,
+      "txHash": "0x465054ad6cb6788afff3d83562bb05a9d3547fd40962722c1f4213125a2f7da0",
+      "blockNumber": 71078848,
+      "timestamp": 1789847954
+    }
+  ],
+  "amendments": [
+    {
+      "id": "1",
+      "previous": [],
+      "current": [
+        "3993206769417839329"
+      ],
+      "version": 1,
+      "timestamp": 1789847910,
+      "txHash": "0xc586aead4d432265e77b655478c84f90f9fb6a374b372eea61c56b994b5a4906",
+      "blockNumber": 71078847
+    }
+  ]
+}

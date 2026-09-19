@@ -1,4 +1,4 @@
-# dev leg — 2026-09-19T19:54:38Z
+# dev leg — 2026-09-19T19:59:18Z
 
 contract: 0xc5a5C42992dECbae36851359345FE25997F5C42d
 mandate:  1
@@ -6,7 +6,7 @@ mandate:  1
 ## seed
 ```
 Compiling 26 files with Solc 0.8.24
-Solc 0.8.24 finished in 802.56ms
+Solc 0.8.24 finished in 558.83ms
 Compiler run successful!
 Script ran successfully.
 
@@ -24,13 +24,13 @@ Script ran successfully.
 
 Chain 196
 
-Estimated max fee per gas: 0.035020715 gwei
-Estimated base fee per gas: 0.017510357 gwei
+Estimated max fee per gas: 0.035062225 gwei
+Estimated base fee per gas: 0.017531112 gwei
 Estimated max priority fee per gas: 0.000000001 gwei
 
 Estimated total gas used for script: 3682220
 
-Estimated amount required: 0.0001289539771873 ETH
+Estimated amount required: 0.0001291068261395 ETH
 
 ==========================
 
@@ -62,13 +62,13 @@ Script ran successfully.
 
 Chain 196
 
-Estimated max fee per gas: 0.030646853 gwei
-Estimated base fee per gas: 0.015323426 gwei
+Estimated max fee per gas: 0.030683177 gwei
+Estimated base fee per gas: 0.015341588 gwei
 Estimated max priority fee per gas: 0.000000001 gwei
 
 Estimated total gas used for script: 1376241
 
-Estimated amount required: 0.000042177455619573 ETH
+Estimated amount required: 0.000042227446197657 ETH
 
 ==========================
 
@@ -81,4 +81,10 @@ Transactions saved to: /home/runner/work/vectra/vectra/broadcast/DevLeg.s.sol/19
 
 Sensitive values saved to: /home/runner/work/vectra/vectra/cache/DevLeg.s.sol/196/leg-latest.json
 
+```
+
+## decoded
+```
+decoded 1 leg(s), 1 amendment(s) -> data/dev/history.json
+  mandate 1  1000000000000000000 0xc845b289 -> 221893838 0xb6ceceab  v1
 ```
