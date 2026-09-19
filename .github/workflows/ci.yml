@@ -70,6 +70,28 @@ jobs:
         working-directory: web
         run: npx tsc --noEmit
 
+      # Development data must not reach the deployed build. The fork export is
+      # real, but its transactions do not exist on X Layer, and a banner saying
+      # so is not carried by a screenshot of the table above it. Asserted in
+      # both directions: a gate stuck closed would look correct on a site with
+      # no mainnet history yet, and would then hide the real legs on the day
+      # the mandate executes.
+      - name: Fork data cannot reach production
+        working-directory: web
+        run: npx tsx scripts/check-fork-gate.ts
+
+      # The flag is opt-in, so the build must not carry it enabled. This checks
+      # the environment the build actually runs in rather than trusting that
+      # nobody set it.
+      - name: The fork flag is not enabled in CI
+        working-directory: web
+        run: |
+          if [ "${NEXT_PUBLIC_ALLOW_FORK_HISTORY:-}" = "true" ]; then
+            echo "::error::NEXT_PUBLIC_ALLOW_FORK_HISTORY is enabled; fork data would ship"
+            exit 1
+          fi
+          echo "fork flag off: ${NEXT_PUBLIC_ALLOW_FORK_HISTORY:-<unset>}"
+
       - name: Build
         working-directory: web
         run: npm run build

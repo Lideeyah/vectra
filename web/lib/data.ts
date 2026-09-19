@@ -166,13 +166,51 @@ export type History = {
 };
 
 /**
+ * Development data must not reach the deployed site.
+ *
+ * The fork export is real — real router, real pool state, real amounts — but
+ * the transactions do not exist on X Layer. Rendering them behind a banner that
+ * says so is not enough: a screenshot of a legs table does not include the
+ * banner, and the table is what gets shown to someone deciding whether to trust
+ * this. So the deployed build shows the empty state until a real mandate
+ * executes, and fork data is visible only when it is explicitly asked for.
+ *
+ * The flag is opt-IN and the default is exclusion, so shipping fork data
+ * requires someone to have turned it on rather than to have forgotten to turn
+ * it off.
+ */
+export const ALLOW_FORK_HISTORY =
+  process.env.NEXT_PUBLIC_ALLOW_FORK_HISTORY === "true";
+
+/**
+ * The gate, as a pure function so it can be tested in both directions without
+ * a browser or a network. Anything not explicitly "mainnet" is development
+ * data — an absent origin included.
+ */
+export function historyForDisplay(
+  h: History | null,
+  allowFork: boolean,
+): History | null {
+  if (!h) return null;
+  if (h.origin === "mainnet") return h;
+  return allowFork ? h : null;
+}
+
+/**
  * Mainnet history if it exists, otherwise the fork run. Never merged: they are
  * different chains, and a combined list would attribute fork transactions to
  * X Layer.
  */
 export async function loadHistory(): Promise<History | null> {
-  return (
-    (await getJSON<History>("history.json")) ??
-    (await getJSON<History>("dev/history.json"))
+  const mainnet = await getJSON<History>("history.json");
+  if (mainnet?.origin === "mainnet") return mainnet;
+
+  // Not mainnet. Nothing further is even fetched unless fork data was asked
+  // for, so the deployed build does not request the development file at all.
+  if (!ALLOW_FORK_HISTORY) return null;
+
+  return historyForDisplay(
+    mainnet ?? (await getJSON<History>("dev/history.json")),
+    true,
   );
 }
