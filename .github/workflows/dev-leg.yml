@@ -42,6 +42,21 @@ jobs:
           done
           echo "forked chain $(cast chain-id --rpc-url http://127.0.0.1:8545) at block $(cast block-number --rpc-url http://127.0.0.1:8545)"
 
+      - name: Move real NVDAx to the owner, by impersonation
+        run: |
+          set -euo pipefail
+          R=http://127.0.0.1:8545
+          WHALE=0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5
+          OWNER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+          NVDAX=0xc845b2894dBddd03858fd2D643B4eF725fE0849d
+          # forge script's --unlocked does not give a signer for an arbitrary
+          # address; anvil's own impersonation does.
+          cast rpc anvil_impersonateAccount $WHALE --rpc-url $R >/dev/null
+          cast rpc anvil_setBalance $WHALE 0xde0b6b3a7640000 --rpc-url $R >/dev/null
+          cast send $NVDAX "transfer(address,uint256)" $OWNER 8000000000000000000 \
+            --from $WHALE --unlocked --rpc-url $R >/dev/null
+          echo "owner NVDAx: $(cast call $NVDAX 'balanceOf(address)(uint256)' $OWNER --rpc-url $R)"
+
       - name: Deploy and seed a mandate that needs a sell
         id: seed
         run: |

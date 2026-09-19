@@ -42,12 +42,12 @@ contract DevLeg is Script {
         VectraMandate vectra = new VectraMandate(ROUTER, SPENDER, USDC);
         vm.stopBroadcast();
 
-        // Real tokens from a live holder, moved by the token's own logic.
-        vm.startBroadcast(WNVDAX);
-        IERC20(NVDAX).transfer(owner(), 8e18);
-        vm.stopBroadcast();
-
+        // The tokens are moved OUTSIDE this script, by cast with
+        // anvil_impersonateAccount. vm.startBroadcast on an arbitrary address
+        // with --unlocked does not produce a signer, which is the failure this
+        // exact pattern already produced once during local seeding.
         uint256 held = IXStock(NVDAX).sharesOf(owner());
+        require(held > 0, "owner holds no NVDAx: run the impersonated transfer first");
 
         address[] memory tokens = new address[](1);
         tokens[0] = NVDAX;
