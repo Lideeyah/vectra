@@ -12,8 +12,13 @@ optimizer_runs = 200
 evm_version = "paris"
 via_ir = false
 # Fork tests need --fork-url xlayer and are excluded from the default run.
-no_match_path = "test/(ForkXLayer|RealRouter).t.sol"
+# Glob, not a regex. Fork suites need --fork-url and live in their own
+# directory so the exclusion cannot silently fail to match.
+no_match_path = "test/fork/*"
 fs_permissions = [{ access = "read", path = "./data" }]
 
 [rpc_endpoints]
 xlayer = "https://rpc.xlayer.tech"
+
+# Fork suites are excluded from the default run, so run them explicitly with:
+#   FOUNDRY_NO_MATCH_PATH= forge test --match-path "test/fork/*" --fork-url xlayer
