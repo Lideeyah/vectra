@@ -17,7 +17,9 @@ via_ir = false
 # Glob, not a regex. Fork suites live in their own directory so the exclusion
 # cannot silently fail to match.
 no_match_path = "test/fork/*"
-fs_permissions = [{ access = "read", path = "./data" }]
+# Fork tests read the DEPLOYMENT artifact from ./out and etch it, so the code
+# under test is the paris build rather than a cancun recompile.
+fs_permissions = [{ access = "read", path = "./data" }, { access = "read", path = "./out" }]
 
 # THE FORK-TEST ENVIRONMENT. Inherits everything above and raises only the EVM
 # version, because the chain being forked runs Cancun: Uniswap V4's
@@ -30,6 +32,9 @@ fs_permissions = [{ access = "read", path = "./data" }]
 # product depends on.
 [profile.fork]
 evm_version = "cancun"
+# A separate output directory so the cancun compilation of the TEST contracts
+# cannot overwrite the paris artifact the fork tests deploy from.
+out = "out-cancun"
 # NOTE: no_match_path cannot be cleared from a profile — an empty string here is
 # ignored and the inherited glob still applies. The runner clears it with
 # FOUNDRY_NO_MATCH_PATH= instead, which was verified to work.

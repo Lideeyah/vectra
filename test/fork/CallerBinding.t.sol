@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import {Test, console2} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {VectraMandate} from "../../contracts/VectraMandate.sol";
+import {ParisArtifact} from "./ParisArtifact.sol";
 
 /**
  * @notice Does a swap payload built for one address work when forwarded by
@@ -22,7 +23,7 @@ import {VectraMandate} from "../../contracts/VectraMandate.sol";
  *
  * Run via the caller-binding workflow, which fetches and forwards in one job.
  */
-contract CallerBindingTest is Test {
+contract CallerBindingTest is ParisArtifact {
     address constant ROUTER = 0x7c5bEE2a8091C3ef39072f64F18Fac913060AEaF;
     address constant SPENDER = 0x8b773D83bc66Be128c60e07E17C8901f7a64F000;
     address constant USDC = 0xB6CEceAB302E2E4948951eE7843FC24E92933061;
@@ -43,12 +44,14 @@ contract CallerBindingTest is Test {
         amountIn = vm.envOr("VECTRA_PAYLOAD_AMOUNTIN", uint256(5e6));
         minOut = vm.envOr("VECTRA_PAYLOAD_MINOUT", uint256(1));
 
-        // Deploy at the predicted mainnet address by deploying AS the deployer
-        // at the nonce the prediction assumed.
-        vm.setNonce(DEPLOYER, 0);
-        vm.prank(DEPLOYER);
-        vectra = new VectraMandate(ROUTER, SPENDER, USDC);
+        // Deploy the DEPLOYMENT artifact, not a cancun recompile of it. The
+        // fork VM runs cancun because V4 needs transient storage; the contract
+        // on it is byte-for-byte the paris build that will be deployed.
+        vectra = VectraMandate(deployParisArtifact(DEPLOYER, 0, ROUTER, SPENDER, USDC));
         console2.log("contract deployed in-fork at", address(vectra));
+
+        // The claim made checkable: fails loudly if the artifact ever drifts.
+        assertDeployedHash(address(vectra), vm.envOr("VECTRA_DEPLOY_HASH", bytes32(0)));
     }
 
     function _none() internal pure returns (address[] memory a) { a = new address[](0); }

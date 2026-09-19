@@ -56,9 +56,16 @@ jobs:
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
           OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
           VECTRA_WALLET: ${{ inputs.address }}
+          # The recorded deployment hash. The fork test asserts the code it runs
+          # against hashes to this, so a drifted artifact fails loudly instead of
+          # being silently exercised.
+          VECTRA_DEPLOY_HASH: "0xc20f87eccd8af42fa47608d1c60b4cce916df43dce508670876ab6a8c6479db9"
         run: |
           set -euo pipefail
 
+          # Build the DEPLOYMENT artifact under the default profile first. The
+          # fork tests etch it rather than recompiling under cancun.
+          forge build
           echo "fetching a payload for ${VECTRA_WALLET}"
           python fetch_payload.py > /tmp/payload.env
           # The address the payload was built for, asserted by the test.
@@ -76,7 +83,7 @@ jobs:
           # perishable and must not be. Capture the test output, strip anything
           # carrying calldata, and commit only the verdict.
           set +e
-          FOUNDRY_NO_MATCH_PATH= forge test \
+          FOUNDRY_PROFILE=fork FOUNDRY_NO_MATCH_PATH= forge test \
             --match-path "test/fork/CallerBinding.t.sol" \
             $FORK_ARGS -vvvv 2>&1 | tee /tmp/result.log
           RC=${PIPESTATUS[0]}

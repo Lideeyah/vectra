@@ -243,23 +243,24 @@ default profile (paris) : call fails, value 0    -> TSTORE inactive
 fork profile   (cancun) : call succeeds, value 42 -> TSTORE active
 ```
 
-**The honest gap this creates.** The contract exercised in fork tests is compiled under Cancun and is therefore **not byte-identical** to the artifact that will be deployed:
+**Fork tests exercise the exact deployed bytecode.** An earlier version of this section claimed byte-identical fork testing was impossible because the forked chain needs Cancun. That was wrong, and it repeated the very conflation the profile split existed to fix: **the VM's EVM version and the contract's compilation target are independent.** A Cancun VM can run Paris bytecode.
+
+So fork tests no longer construct the contract with `new`, which would compile it under the fork profile. They read the **creation bytecode from the `paris` artifact in `./out`**, append the constructor arguments, and deploy it with `CREATE` as the real deployer at the real nonce. The runtime code that lands is byte-for-byte what a mainnet deployment produces, immutables and all, on a VM running Cancun so V4 routes execute.
+
+The two profiles write to separate output directories (`out` and `out-cancun`) so a fork run's compilation cannot overwrite the artifact it is supposed to be testing.
+
+**The claim is checked, not stated.** Every fork run hashes the runtime code actually present at the test address and asserts it equals the recorded deployment hash:
 
 ```
-paris  10,642 bytes   keccak 0x8cc77700...
-cancun 10,436 bytes   keccak 0x9e59bf8c...
-identical: False      delta: -206 bytes
+deployed runtime keccak  0xc20f87eccd8af42fa47608d1c60b4cce916df43dce508670876ab6a8c6479db9
+deployed runtime bytes   10,641          (a cancun recompile is 10,436)
 ```
 
-Is the difference semantically neutral? The evidence, rather than an assertion:
+That hash is the artifact **with these constructor arguments' immutables in place**, which is what actually goes on chain — not the artifact's placeholder-zeroed `deployedBytecode`. The guard was verified to fail: given a deliberately wrong hash it reports `code at the test address is NOT the recorded deployment artifact` and stops the run in `setUp`.
 
-- **The full 61-test suite passes identically under both profiles.** Every behavioural property the contract claims — direction, distance, rate, cap accounting, settlement, dust bounds, rebase handling, access control — holds under each compilation.
-- **The contract contains no transient storage, no `MCOPY` written by hand, and no opcode-version-dependent logic.** The 206-byte difference is the optimiser using Cancun memory instructions for copies solc would otherwise open-code.
-- The difference is in *how memory is moved*, not in *what the contract decides*.
+There is a second, cheaper guard for the common mistake: the deployed runtime's length is compared against the artifact's, which catches a wrong-profile build immediately with a readable message rather than as a hash mismatch.
 
-**What that evidence does not cover.** It is bounded by the suite: behaviour no test exercises is not compared. A property that exists in the Paris build but is only exercised by a fork test has been verified solely on the Cancun build. The mitigation is that the fork tests check *interaction with external contracts* — routing, settlement, real token reads — rather than internal logic, and internal logic is covered by the default-profile suite on the deployment build.
-
-If byte-identical assurance were required, the fork tests would have to run under `paris`, which is impossible while the chain being forked runs V4. That is a genuine trade, taken deliberately and recorded rather than resolved.
+**The semantic-neutrality argument is no longer needed and has been removed.** It was load-bearing only while the fork tests ran a recompilation. They do not. The statement is now simply that fork tests exercise the deployed bytecode, and a run that does not is a run that fails.
 
 **Reproducibility, verified rather than assumed.** Pinning the EVM version removes one source of drift; the claim that actually matters is that a clean rebuild produces identical bytecode, and that is testable. Artifacts were wiped entirely and the contract rebuilt from the pinned settings:
 
