@@ -188,26 +188,45 @@ def select_leg(m, state):
     Only USDC-funded buys are selected in this version: selling is permitted by
     the contract but the initial build is buy-only, matching SPEC 9.1.
     """
-    tradeable = [p for p in state["positions"]
-                 if p["priceUsd"] and p["driftBps"] < 0]
-    if not tradeable:
+    tol = m["driftToleranceBps"]
+    priced = [p for p in state["positions"] if p["priceUsd"]]
+    if not priced:
+        return None, "no position has a usable price this cycle"
+
+    largest = max(priced, key=lambda p: abs(p["driftBps"]))
+    if abs(largest["driftBps"]) <= tol:
+        return None, (f"largest drift {abs(largest['driftBps'])}bps is within "
+                      f"tolerance {tol}bps")
+
+    under = [p for p in priced if p["driftBps"] < -tol]
+    over = [p for p in priced if p["driftBps"] > tol]
+
+    # Report the real constraint, not the first one hit. A position that is
+    # overweight needs a sell; saying "no USDC" would send the user to top up
+    # cash when the actual answer is that this build cannot sell.
+    if not under and over:
+        names = ", ".join(f"{p['symbol']} +{p['driftBps']}bps" for p in over)
+        return None, (f"rebalancing requires selling ({names}); this build is "
+                      f"buy-only, so no leg is available")
+
+    if not under:
         return None, "no position is below target with a usable price"
 
-    # Most underweight first — that is the leg that reduces distance most.
-    worst = min(tradeable, key=lambda p: p["driftBps"])
-    if abs(worst["driftBps"]) <= m["driftToleranceBps"]:
-        return None, (f"largest drift {abs(worst['driftBps'])}bps is within "
-                      f"tolerance {m['driftToleranceBps']}bps")
-
-    # Size: close the gap, capped by the leg limit, the cap, and cash on hand.
+    worst = min(under, key=lambda p: p["driftBps"])
     gap_usd = (abs(worst["driftBps"]) / 10_000) * state["totalUsd"]
     remaining_cap = m["totalCapUsdc"] - m["spentUsdc"]
-    size = min(gap_usd, m["maxLegUsdc"], remaining_cap, state["usdcValueUsd"])
 
     if remaining_cap <= 0:
         return None, "total spend cap reached"
     if state["usdcValueUsd"] <= 0:
-        return None, "owner holds no USDC"
+        shortfall = min(gap_usd, m["maxLegUsdc"], remaining_cap)
+        extra = (f"; selling {over[0]['symbol']} would fund it, but this build "
+                 f"is buy-only") if over else ""
+        return None, (f"{worst['symbol']} is {abs(worst['driftBps'])}bps below "
+                      f"target and needs about ${shortfall:.2f}, but the owner "
+                      f"holds no USDC{extra}")
+
+    size = min(gap_usd, m["maxLegUsdc"], remaining_cap, state["usdcValueUsd"])
     if size < 0.01:
         return None, f"computed leg size ${size:.4f} below the minimum"
 
