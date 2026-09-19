@@ -212,6 +212,16 @@ Deploy and verify **in the same session**. Reconstructing compiler settings late
 
 `evm_version` was previously unpinned and Foundry defaulted it to `cancun`. That is wrong twice over on this chain. X Layer is a zkEVM and may not implement Cancun opcodes; and an unpinned setting means a rebuild under a later Foundry produces *different bytecode* for an address that can never be redeployed. Pinning to `paris` avoids `PUSH0` and every Cancun opcode. Pinning it changed the runtime bytecode from 10,063 to 10,256 bytes, which is the evidence the setting actually took effect.
 
+**Reproducibility, verified rather than assumed.** Pinning the EVM version removes one source of drift; the claim that actually matters is that a clean rebuild produces identical bytecode, and that is testable. Artifacts were wiped entirely and the contract rebuilt from the pinned settings:
+
+| | |
+|---|---|
+| runtime bytecode | 10,256 bytes |
+| **runtime keccak** | `0x802155c846d51df989aa09c9f19934f4428635150a7c15e84ccd9457bba093cc` |
+| creation keccak | `0x659ce1d9fe99b613b2adfcf0a63b78fefdcda35f9d70adca548315f693babf18` |
+
+The hash is identical across a from-scratch rebuild. **That hash is what verification is checked against**, and anyone can reproduce it from this repository at the pinned compiler, optimizer and EVM version without trusting the deployer. If a future rebuild disagrees with it, something in the toolchain has moved and the deployed address can no longer be reproduced from source — which is worth discovering before the address is immutable rather than after.
+
 **Constructor arguments**, ABI-encoded, for the verified addresses:
 
 ```
