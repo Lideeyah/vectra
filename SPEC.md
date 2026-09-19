@@ -452,6 +452,8 @@ Consequences: liquidity is AMM rather than RFQ, so depth is observable on chain 
 
 **X Layer's public RPC caps `eth_getLogs` at 100 blocks.** Historic log scanning is therefore impractical against 70.9M blocks, and the public alternatives are either Cloudflare-blocked or restrict ranges on their free tier. Any on-chain archaeology must be targeted rather than swept.
 
+**A manual workflow_dispatch cancels a running scheduled job in the same concurrency group.** `cancel-in-progress: false` does not protect the job in flight: a dispatch is a higher priority waiting request and displaces it, logging "Canceling since a higher priority waiting request for <group> exists". Two multi-hour recorder runs were killed this way, at 2h11m and 3h44m, by clicking Run workflow while one was already going. Scheduled fires queue harmlessly. Never trigger the recorder manually unless the Actions tab shows nothing in progress.
+
 **A concurrency group with `cancel-in-progress: false` drops pending runs rather than queueing them.** Sharing one group between the recorder and discovery silently cost 97% of a day's price series. Workflows that must not miss a tick get their own group.
 
 **Scheduled runs are irregular.** GitHub's five minute cron is a floor, not a guarantee; runs are delayed or dropped under load, and schedules auto-disable after sixty days of repository inactivity. The recorder buckets and dedupes readings so jitter is absorbed, but the tracking error computation must treat the series as irregularly sampled rather than assuming 288 readings per day.

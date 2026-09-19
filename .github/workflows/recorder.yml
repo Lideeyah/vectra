@@ -13,9 +13,16 @@ permissions:
   contents: write
 
 concurrency:
-  # Its own group, NOT shared with discovery. A shared group made GitHub cancel
-  # pending scheduled runs, which cost 97% of the intended series. Push races
-  # are handled by the rebase-and-retry loop below instead.
+  # Its own group, NOT shared with discovery.
+  #
+  # DO NOT manually "Run workflow" while a run is already in progress. A
+  # workflow_dispatch is a HIGHER PRIORITY waiting request than a schedule, so
+  # it cancels the running job:
+  #     "Canceling since a higher priority waiting request for
+  #      price-recorder exists"
+  # That is what killed run #12 at 2h11m and another at 3h44m. Scheduled fires
+  # queue harmlessly; manual ones displace. Only trigger manually when the
+  # Actions tab shows no recorder in progress.
   group: price-recorder
   cancel-in-progress: false
 
