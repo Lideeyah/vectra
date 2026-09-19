@@ -1,0 +1,49 @@
+name: agent cycle
+
+# Manual only, and DRY RUN: it computes the leg it would take and logs it.
+# Nothing is signed or sent — the contract is not deployed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Deliberately NOT the recorder's group. A workflow_dispatch outranks a
+  # scheduled run and would cancel the recorder mid-flight if they shared one.
+  group: agent-cycle
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run one cycle
+        continue-on-error: true
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+        run: python agent.py
+
+      - name: Commit the cycle log
+        if: always()
+        run: |
+          git config user.name "Lydia Solomon"
+          git config user.email "lydiasolomon137@gmail.com"
+          [ -z "$(git status --porcelain data)" ] && echo "nothing new" && exit 0
+          git add data
+          git commit -m "agent: cycle $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep $((i * 3))
+          done
+          exit 1

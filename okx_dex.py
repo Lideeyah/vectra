@@ -133,7 +133,9 @@ def endpoint(name, params, chain=X_LAYER):
     merged["attempts"] = [
         {"path": p, "status": s,
          "code": b.get("code") if isinstance(b, dict) else None,
-         "msg": (b.get("msg") if isinstance(b, dict) else str(b))[:200]}
+         "msg": str(
+             (b.get("msg") or b.get("transport_error") or b.get("non_json_body") or b)
+             if isinstance(b, dict) else b)[:200]}
         for p, s, b in attempts
     ]
     return primary_status, merged, attempts
