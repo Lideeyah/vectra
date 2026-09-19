@@ -40,6 +40,14 @@ PRICE_NOTIONAL_USD = 5.0     # size at which positions are valued
 SLIPPAGE_PERCENT = "0.5"
 THROTTLE_S = 1.1
 SANITY_BAND = 0.25           # reject a price 25% off the previous cycle
+
+# The contract refuses a leg that moves more than maxLegBpsOfTarget of a
+# token's target share count — in EITHER direction. A favourable fill legitimately
+# delivers more than quoted, so a leg sized AT the bound is reverted by ordinary
+# positive slippage, and the refusal log then shows a rate-limit breach on a
+# trade that was simply better than expected. That works in testing and refuses
+# every leg on a volatile day. Size beneath the ceiling, never against it.
+RATE_HEADROOM = 0.80
 EXECUTE = os.environ.get("VECTRA_EXECUTE") == "1"
 
 SEL_BALANCE_OF = "0x70a08231"
@@ -165,7 +173,8 @@ def build_state(m):
         positions.append({"symbol": sym, "address": addr, "decimals": dec,
                           "balance": bal, "shares": sh, "multiplier": mult,
                           "priceUsd": price, "valueUsd": value,
-                          "targetWeightBps": t["weightBps"]})
+                          "targetWeightBps": t["weightBps"],
+                          "targetShares": t.get("targetShares")})
 
     usdc_bal = balance_of(USDC, owner)
     usdc_value = (usdc_bal or 0) / 10 ** USDC_DECIMALS
@@ -194,6 +203,24 @@ def distance_bps(values, total, targets):
     return sum(abs((v / total) * 10_000 - t) for v, t in zip(values, targets))
 
 
+def rate_cap_usd(m, p):
+    """The contract's share-denominated rate bound, converted to dollars.
+
+    targetShares * bps / 10000 gives the share movement the contract permits.
+    Shares are converted to balance by the multiplier and to dollars by the
+    quoted price, then held under the ceiling by RATE_HEADROOM so that a
+    favourable fill does not push the leg over it.
+    """
+    target_shares = p.get("targetShares")
+    bps = m.get("maxLegBpsOfTarget")
+    if not target_shares or not bps or not p.get("priceUsd"):
+        return float("inf")
+    allowed_shares = target_shares * bps / 10_000
+    mult = p.get("multiplier") or 1.0
+    allowed_tokens = allowed_shares * mult / 10 ** p["decimals"]
+    return allowed_tokens * p["priceUsd"] * RATE_HEADROOM
+
+
 def evaluate_legs(m, state):
     """Every admissible leg in both directions, with the distance each reaches.
 
@@ -216,15 +243,19 @@ def evaluate_legs(m, state):
             continue
         gap_usd = (abs(p["driftBps"]) / 10_000) * total
 
+        # The contract's rate bound, expressed in dollars so it can be compared
+        # with the other limits, and held under rather than met exactly.
+        rate_usd = rate_cap_usd(m, p)
+
         if p["driftBps"] < 0:
             # Underweight: buy with USDC. Spending consumes cap headroom.
             size = min(gap_usd, m["maxLegUsdc"], remaining_cap,
-                       state["usdcValueUsd"])
+                       state["usdcValueUsd"], rate_usd)
             direction, delta = "buy", +1
         else:
             # Overweight: sell into USDC. A sell commits no new capital, so it
             # does not consume cap headroom — see SPEC 5.2 on the cap decision.
-            size = min(gap_usd, m["maxLegUsdc"], p["valueUsd"] or 0)
+            size = min(gap_usd, m["maxLegUsdc"], p["valueUsd"] or 0, rate_usd)
             direction, delta = "sell", -1
 
         if size < 0.01:

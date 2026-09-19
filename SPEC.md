@@ -223,6 +223,10 @@ Deploy and verify **in the same session**. Reconstructing compiler settings late
 
 `evm_version` was previously unpinned and Foundry defaulted it to `cancun`. That is wrong twice over on this chain. X Layer is a zkEVM and may not implement Cancun opcodes; and an unpinned setting means a rebuild under a later Foundry produces *different bytecode* for an address that can never be redeployed. Pinning to `paris` avoids `PUSH0` and every Cancun opcode. Pinning it changed the runtime bytecode from 10,063 to 10,256 bytes, which is the evidence the setting actually took effect.
 
+> **STALE — DO NOT DEPLOY AGAINST THIS.** The hash below was captured mid-audit and `maxLegBpsOfTarget` has changed the contract since. Regenerate it **after the final contract change**, as the last step before deployment, and replace this block. A hash that was true an hour ago is worse than no hash, because it looks like a check.
+>
+> Regenerate with: `rm -rf out cache && forge build` then keccak the runtime object from `out/VectraMandate.sol/VectraMandate.json`.
+
 **Reproducibility, verified rather than assumed.** Pinning the EVM version removes one source of drift; the claim that actually matters is that a clean rebuild produces identical bytecode, and that is testable. Artifacts were wiped entirely and the contract rebuilt from the pinned settings:
 
 | | |
@@ -303,6 +307,16 @@ If drift exceeds tolerance, selects the single leg that most reduces total dista
 Requests a quote for that leg, sets `minOut` from the quote with the user's slippage tolerance applied, and calls `execute`.
 
 Records the outcome, including failures and refusals, and commits it.
+
+### 6.1.1 Legs are sized beneath the rate bound, never against it
+
+The contract refuses a leg that moves more than `maxLegBpsOfTarget` of a token's target share count, **in either direction**. That includes over-delivery: a favourable fill moves the position faster than the mandate permits and is refused like any other breach.
+
+In production the agent sizes a leg against a quote, and a fill can legitimately land above it. A leg sized *at* the ceiling is therefore reverted by ordinary positive slippage, and the refusal log shows a rate-limit breach on a trade that was simply better than expected. That behaves perfectly in testing, where fills match quotes, and refuses legs on exactly the volatile days when rebalancing matters most.
+
+So the ceiling is the contract's and the agent stays under it. Legs are sized to `RATE_HEADROOM` of the permitted movement — currently 80% — which leaves the whole band between the agent's size and the contract's limit available to absorb a favourable fill.
+
+The general form, since this recurs wherever a contract enforces a hard bound on a quantity the agent can only estimate: **the enforcing side sets a ceiling, the estimating side aims beneath it.** A component that targets a limit exactly will breach it the moment reality is kinder than the forecast.
 
 ### 6.2 What the agent refuses to do
 

@@ -8,15 +8,17 @@ import agent
 TOL = 500
 
 
-def mandate(cap=50.0, spent=0.0, max_leg=5.0):
+def mandate(cap=50.0, spent=0.0, max_leg=5.0, rate_bps=2000):
     return {"driftToleranceBps": TOL, "maxLegUsdc": max_leg,
-            "totalCapUsdc": cap, "spentUsdc": spent, "owner": "0x0", "basket": []}
+            "totalCapUsdc": cap, "spentUsdc": spent, "owner": "0x0",
+            "maxLegBpsOfTarget": rate_bps, "basket": []}
 
 
-def position(sym, value, target, price=100.0):
+def position(sym, value, target, price=100.0, target_shares=10 * 10 ** 18):
     return {"symbol": sym, "address": "0x" + sym.encode().hex().ljust(40, "0")[:40],
             "decimals": 18, "priceUsd": price, "valueUsd": value,
-            "targetWeightBps": target}
+            "targetWeightBps": target, "targetShares": target_shares,
+            "multiplier": 1.0}
 
 
 def state(positions, usdc):
@@ -112,6 +114,29 @@ def test_refusal_names_the_binding_constraint():
     assert "no USDC" in why and "AAAx" in why, why
     assert "buy-only" not in why, "stale buy-only wording must be gone"
     print("  PASS: refusal names the token, the amount and the real blocker")
+
+
+def test_leg_is_sized_under_the_rate_bound_not_against_it():
+    """A leg sized AT the contract's ceiling is reverted by a favourable fill.
+
+    The contract permits maxLegBpsOfTarget of target shares in either direction,
+    so ordinary positive slippage on a leg sized exactly at the bound trips it,
+    and the refusal log shows a rate-limit breach on a trade that was merely
+    better than expected. The agent must stay beneath the ceiling.
+    """
+    # target 10e18 shares at 2000bps = 2e18 shares permitted, at $100 = $200.
+    s = state([position("AAAx", 100.0, 9000), position("BBBx", 900.0, 1000)], usdc=500.0)
+    m = mandate(cap=10_000.0, max_leg=1_000.0)
+    leg, why = agent.select_leg(m, s)
+    show("rate bound with headroom", s, leg, why)
+
+    assert leg is not None, why
+    ceiling = 200.0                    # what the contract would permit
+    assert leg["amountUsd"] <= ceiling * agent.RATE_HEADROOM + 1e-9, \
+        f"leg sized at {leg['amountUsd']}, must stay under {ceiling}"
+    assert leg["amountUsd"] < ceiling, "no headroom beneath the ceiling"
+    print(f"  PASS: leg ${leg['amountUsd']:.2f} sits under the ${ceiling:.2f} ceiling "
+          f"({agent.RATE_HEADROOM:.0%} headroom)")
 
 
 if __name__ == "__main__":
