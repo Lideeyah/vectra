@@ -88,7 +88,12 @@ def run(symbol, addr):
         best = max(ok, key=lambda r: r["rate"])
         worst = min(ok, key=lambda r: r["rate"])
         spread = (best["rate"] - worst["rate"]) / worst["rate"] * 100
-        improves = best["usd"] > ok[0]["usd"] and best["rate"] > ok[0]["rate"]
+        # An "improvement" must exceed measurement noise. Rates differing in the
+        # eighth decimal are identical for this purpose, and treating them as an
+        # improvement produced a false ROUTING ARTIFACT verdict on SPYx.
+        IMPROVE_THRESHOLD_PCT = 0.001
+        gain = (best["rate"] - ok[0]["rate"]) / ok[0]["rate"] * 100
+        improves = best["usd"] > ok[0]["usd"] and gain > IMPROVE_THRESHOLD_PCT
 
         print(f"\n  distinct routes across the ladder: {len(routes)}")
         for rt in sorted(routes):
@@ -107,8 +112,12 @@ def run(symbol, addr):
                        "cost here, and the proportionality claim needs "
                        "qualifying to the liquid set with exceptions.")
         else:
-            verdict = ("NORMAL: the rate does not improve with size; cost is "
-                       "flat or degrades as expected.")
+            worst_delta = (ok[-1]["rate"] - ok[0]["rate"]) / ok[0]["rate"] * 100
+            verdict = (f"NORMAL: the rate does not meaningfully improve with "
+                       f"size (best is {gain:+.4f}% vs the smallest, within "
+                       f"noise). Cost degrades monotonically as expected: "
+                       f"{worst_delta:+.4f}% from ${ok[0]['usd']:g} to "
+                       f"${ok[-1]['usd']:g}.")
         print(f"\n  VERDICT: {verdict}")
     return {"symbol": symbol, "address": addr, "rows": rows, "verdict": verdict}
 

@@ -469,6 +469,22 @@ Recorded as they are found, so the document does not quietly diverge from what i
 
 **OKX's edge rejects default HTTP clients.** Requests carrying a library default user agent are refused by Cloudflare with error 1010 before reaching the API. Clients must send ordinary browser headers. If this escalates to TLS fingerprinting, the correct response is to adopt OKX's own SDK rather than push further against the edge.
 
+**The depth column measures slippage plus price drift, not slippage alone.** Each figure came from two quotes taken seconds apart, so any movement in the underlying between them lands in the result. On a quiet asset that contamination is negligible; on a volatile one it can exceed the slippage being measured. MSTRx's apparent **−0.0362%** — a better rate at $50 than at $1, which would have been a crack in the proportionality claim — did not reproduce. A single-pass size ladder shows it degrading monotonically like everything else, so the original figure was price drift on a volatile name, not market structure.
+
+**The size ladder is the better evidence, and it supports the claim directly.** Quoted in one pass across $1, $5, $10, $25, $50, $100:
+
+| Size | MSTRx vs $1 | SPYx vs $1 |
+|---|---|---|
+| $5 | −0.0020% | −0.0000% |
+| $10 | −0.0045% | −0.0000% |
+| $25 | −0.0121% | −0.0001% |
+| $50 | −0.0247% | −0.0003% |
+| $100 | −0.0499% | −0.0008% |
+
+A hundredfold increase in size costs five hundredths of a percent on the more volatile name and under a thousandth on the index. That is the proportionality claim measured directly, and it is stronger than the two-quote depth column because it is one pass with no gap for the price to move through.
+
+**The route changes above $25 without improving the rate.** Both assets switch from `Uniswap V4` to `JIT Router` at $50 and $100, and the rate continues to degrade across the switch. Worth knowing for the agent's route sanity check: a route change is normal at size and is not by itself a signal.
+
 **Depth is measured, not read from a field.** The aggregator returns `priceImpactPercentage` as null on this chain, so the original plan to rank constituents by reported price impact could not work. Depth is instead observed directly: quote the same token at one dollar and at fifty, and read how far the rate degrades between them. This is a better method than the one it replaces, not merely a workaround — it is a direct observation of what the book does under size, rather than a number the venue reports about itself, and it cannot be misreported. The same technique settled the price-unit question on Gapless.
 
 **A refusal is not a liquidity finding.** An early probe at 1.1 second spacing returned a success pattern inconsistent with real markets — TSLAx dead while DELLx quoted — which indicates throttling rather than market depth. Probe outcomes are therefore recorded in three categories that never share a column: `quotable`, `no_route` (a genuine finding about the token), and `unknown` (the API refused us: 429, a rate-limit code, or a transport error). Unknowns are retried on every subsequent run and are never counted as evidence about liquidity. Request spacing defaults to 3 seconds and is raised if refusals persist.
