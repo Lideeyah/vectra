@@ -111,6 +111,88 @@ contract MockRebasingToken {
 }
 
 /**
+ * @notice A rebasing token that misbehaves on purpose.
+ *
+ * Two hazards observed on the real chain, reproduced: a proxy that returns
+ * padded data for a selector it does not implement rather than reverting, and
+ * a multiplier that can move at any point in a transaction including inside a
+ * transfer.
+ */
+contract HostileRebasingToken {
+    string public name = "Hostile xStock";
+    string public symbol = "HOSTx";
+    uint8 public decimals = 18;
+
+    uint256 public multiplier = 1e18;
+    uint256 public totalShares;
+    mapping(address => uint256) private _shares;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    /// @dev 0 = normal, 1 = return 36 bytes of padded garbage, 2 = revert.
+    uint8 public sharesMode;
+    /// @dev Multiplier applied on the next transferFrom, 0 to disable.
+    uint256 public rebaseOnTransferFrom;
+
+    function setSharesMode(uint8 m) external { sharesMode = m; }
+    function setMultiplier(uint256 m) external { multiplier = m; }
+    function armRebaseOnTransferFrom(uint256 m) external { rebaseOnTransferFrom = m; }
+
+    function mintShares(address to, uint256 s) external {
+        _shares[to] += s;
+        totalShares += s;
+    }
+
+    function balanceOf(address a) public view returns (uint256) {
+        return (_shares[a] * multiplier) / 1e18;
+    }
+
+    function rawShares(address a) external view returns (uint256) { return _shares[a]; }
+
+    /// @dev Mirrors the NVDAx proxy: unknown selectors return padded data
+    ///      instead of reverting, so a caller that trusts the return decodes
+    ///      nonsense.
+    function sharesOf(address a) external view returns (uint256) {
+        if (sharesMode == 2) revert("no sharesOf");
+        if (sharesMode == 1) {
+            assembly {
+                mstore(0x00, 0xdeadbeef)
+                mstore(0x20, 0xdeadbeef)
+                mstore(0x40, 0xdeadbeef)
+                return(0x00, 0x44)   // 68 bytes: not a uint256
+            }
+        }
+        return _shares[a];
+    }
+
+    function approve(address s, uint256 a) external returns (bool) {
+        allowance[msg.sender][s] = a;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        uint256 s = (amount * 1e18) / multiplier;
+        _shares[msg.sender] -= s;
+        _shares[to] += s;
+        return true;
+    }
+
+    function transferFrom(address f, address t, uint256 amount) external returns (bool) {
+        uint256 al = allowance[f][msg.sender];
+        if (al != type(uint256).max) allowance[f][msg.sender] = al - amount;
+        // The rebase lands AFTER the allowance is checked and debited but
+        // BEFORE the share conversion, which is the tightest window available.
+        if (rebaseOnTransferFrom != 0) {
+            multiplier = rebaseOnTransferFrom;
+            rebaseOnTransferFrom = 0;
+        }
+        uint256 s = (amount * 1e18) / multiplier;
+        _shares[f] -= s;
+        _shares[t] += s;
+        return true;
+    }
+}
+
+/**
  * @notice Configurable router. Every behaviour here is one the real aggregator
  *         could exhibit; none is assumed impossible.
  */
@@ -161,6 +243,17 @@ contract MockRouter {
         if (give > 0) IERC20(tokenOut).transfer(msg.sender, give);
         (bool ok,) = target.call(cd);
         require(ok, "callback failed");
+    }
+
+    /// @dev Swaps, then fires TWO corporate events within the one transaction.
+    function swapThenRebaseTwice(
+        address tokenIn, address tokenOut, uint256 pull, uint256 give,
+        uint256 first, uint256 second
+    ) external {
+        if (pull > 0) IERC20(tokenIn).transferFrom(msg.sender, address(this), pull);
+        MockRebasingToken(tokenOut).setMultiplier(first);
+        if (give > 0) IERC20(tokenOut).transfer(msg.sender, give);
+        MockRebasingToken(tokenOut).setMultiplier(second);
     }
 
     function boom(string calldata reason) external pure {
