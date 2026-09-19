@@ -92,8 +92,11 @@ jobs:
             echo "- exit: ${RC} ($([ $RC -eq 0 ] && echo PASS || echo FAIL))"
             echo
             echo '```'
+            # set -e with pipefail is active, and grep exits 1 when it matches
+            # nothing, which aborts the step before the commit and leaves no
+            # verdict at all. That is what happened on the first run.
             grep -vE "VECTRA_PAYLOAD=|0x[0-9a-fA-F]{200,}" /tmp/result.log \
-              | grep -E "^\s*(\[PASS|\[FAIL|Suite result|Ran |  )" | head -40
+              | tail -150 || true
             echo '```'
           } > data/verifications/caller_binding.md
 
