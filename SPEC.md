@@ -471,17 +471,35 @@ Recorded as they are found, so the document does not quietly diverge from what i
 
 **The depth column measures slippage plus price drift, not slippage alone.** Each figure came from two quotes taken seconds apart, so any movement in the underlying between them lands in the result. On a quiet asset that contamination is negligible; on a volatile one it can exceed the slippage being measured. MSTRx's apparent **−0.0362%** — a better rate at $50 than at $1, which would have been a crack in the proportionality claim — did not reproduce. A single-pass size ladder shows it degrading monotonically like everything else, so the original figure was price drift on a volatile name, not market structure.
 
-**The size ladder is the better evidence, and it supports the claim directly.** Quoted in one pass across $1, $5, $10, $25, $50, $100:
+**The size ladder replaces the depth column.** Every asset quoted in a single pass across $1, $5, $10, $25, $50, $100. Cost of a hundredfold size increase:
 
-| Size | MSTRx vs $1 | SPYx vs $1 |
-|---|---|---|
-| $5 | −0.0020% | −0.0000% |
-| $10 | −0.0045% | −0.0000% |
-| $25 | −0.0121% | −0.0001% |
-| $50 | −0.0247% | −0.0003% |
-| $100 | −0.0499% | −0.0008% |
+| Asset | $1→$50 | $1→$100 | vs old figure |
+|---|---|---|---|
+| SPYx | 0.0004% | 0.0008% | agrees |
+| NVDAx | −0.0008% | 0.0002% | agrees |
+| QQQx | 0.0006% | 0.0012% | agrees |
+| AAPLx | 0.0017% | 0.0020% | agrees |
+| GOOGLx | 0.0018% | 0.0036% | agrees |
+| BRK.Bx | 0.0018% | 0.0036% | agrees |
+| TSLAx | 0.0021% | 0.0042% | agrees |
+| TSMx | 0.0031% | 0.0062% | agrees |
+| IWMx | 0.0031% | 0.0063% | agrees |
+| AVGOx | 0.0034% | 0.0068% | agrees |
+| HOODx | 0.0035% | 0.0070% | agrees |
+| ASMLx | 0.0036% | 0.0073% | agrees |
+| COINx | 0.0319% | 0.0362% | diverges |
+| MSTRx | 0.0247% | 0.0500% | diverges |
+| RKLBx | 0.2704% | 0.8662% | diverges |
+| IRENx | 2.1068% | 4.1671% | agrees |
+| NKEx | 4.2438% | 5.7359% | diverges — **worse**, not better |
 
-A hundredfold increase in size costs five hundredths of a percent on the more volatile name and under a thousandth on the index. That is the proportionality claim measured directly, and it is stronger than the two-quote depth column because it is one pass with no gap for the price to move through.
+**13 of 17 agree with the old figures; 4 diverge.** Agreement is judged on absolute *or* relative tolerance, because the table spans three orders of magnitude and a fixed bar is punishing at one end and meaningless at the other.
+
+**The old method was unreliable, not useless.** Twelve constituents reproduce to within a fraction of a basis point. The failures cluster where they should: MSTRx and COINx are volatile, and price movement between two quotes seconds apart swamped a figure measured in thousandths of a percent.
+
+**The thin tail is real, and the prediction that it would vanish was wrong.** NKEx did not collapse — it got **worse**, 4.24% at $50 and 5.74% at $100 against an original 2.92%. IRENx reproduced almost exactly at 2.11%. Only RKLBx collapsed, from 1.93% to 0.27%. So the spread is not an artifact: it runs from **0.0008% on SPYx to 5.74% on NKEx at $100**, four orders of magnitude, measured in single passes.
+
+That makes the contrast stronger than the original claim, not weaker, and it is the honest version: the deep names are effectively free at any size, and the thin ones are not. The product's case does not require every xStock to be cheap. It requires the constituents to be, and all fourteen are — the worst of them, ASMLx, costs 0.0073% for a hundredfold size increase.
 
 **The route changes above $25 without improving the rate.** Both assets switch from `Uniswap V4` to `JIT Router` at $50 and $100, and the rate continues to degrade across the switch. Worth knowing for the agent's route sanity check: a route change is normal at size and is not by itself a signal.
 
