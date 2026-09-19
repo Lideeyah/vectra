@@ -562,6 +562,14 @@ deployer  0x2F45E637920Cc7C7BE15130ab49224C989572AD8   (nonce 0)
 predicted 0xd24424Cc482D68b19e82aa7A6411C48aeD22215B
 ```
 
+**The prediction holds only while the deployer stays at nonce 0.** A CREATE address is a function of the deployer and its nonce, so any outbound transaction from that key before the deploy silently moves the address, and the payload would then be built for somewhere nothing lives.
+
+**Freeze the deployer.** Until the deploy transaction itself, that key sends nothing, approves nothing and funds nothing. Receiving is fine — an inbound transfer does not touch the nonce — so it can be topped up with OKB for gas without breaking the prediction. Only outbound transactions count.
+
+**The trap this creates in the existing flow.** Section 9.1 has the owner approving allowances before the mandate is created. If the owner and the deployer are the same key, that approval is an outbound transaction and it moves the address. So either the mandate owner is a different key from the deployer, or the deploy happens strictly first. The demo wallet is currently both, which makes this a live constraint rather than a hypothetical one.
+
+**CREATE2 is the better answer and is deliberately not taken this week.** A fixed salt makes the address independent of nonce entirely, re-derivable at any time without depending on a key having stayed untouched. It is the right engineering and the wrong use of the remaining days.
+
 So the sequence is:
 
 1. `cast compute-address <deployer> --nonce <n>` for the predicted address.
