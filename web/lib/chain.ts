@@ -1,18 +1,23 @@
 "use client";
 
-import { createPublicClient, custom, http, type Address } from "viem";
+import { createPublicClient, defineChain, http, type Address } from "viem";
 import { CHAIN } from "./config";
 
-export const xlayer = {
+/**
+ * defineChain rather than a bare object: casting the chain to `never` to make
+ * it fit collapses viem's generics, and writeContract then rejects every call
+ * with a type error that describes the cast rather than the problem.
+ */
+export const xlayer = defineChain({
   id: CHAIN.id,
   name: CHAIN.name,
   nativeCurrency: CHAIN.currency,
   rpcUrls: { default: { http: [CHAIN.rpc] } },
   blockExplorers: { default: { name: "OKLink", url: CHAIN.explorer } },
-} as const;
+});
 
 export const publicClient = createPublicClient({
-  chain: xlayer as never,
+  chain: xlayer,
   transport: http(CHAIN.rpc),
 });
 

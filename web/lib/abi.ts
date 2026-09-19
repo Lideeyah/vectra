@@ -52,6 +52,32 @@ export const VECTRA_ABI = [
   { type: "function", name: "spender", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "usdc", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "DUST_WEI", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function", name: "createMandate", stateMutability: "nonpayable",
+    inputs: [{
+      name: "p", type: "tuple",
+      components: [
+        { name: "tokens", type: "address[]" },
+        { name: "weightsBps", type: "uint16[]" },
+        { name: "targetShares", type: "uint256[]" },
+        { name: "driftBps", type: "uint16" },
+        { name: "maxLegUsdc", type: "uint256" },
+        { name: "totalCapUsdc", type: "uint256" },
+        { name: "maxLegBpsOfTarget", type: "uint16" },
+        { name: "expiry", type: "uint64" },
+        { name: "agent", type: "address" },
+      ],
+    }],
+    outputs: [{ name: "id", type: "uint256" }],
+  },
+  {
+    type: "function", name: "amendTargets", stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "targetShares", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
   { type: "function", name: "pause", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },
   { type: "function", name: "resume", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },
   { type: "function", name: "revoke", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [] },

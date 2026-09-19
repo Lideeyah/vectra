@@ -108,7 +108,8 @@ export function NoMandate({ owner }: { owner: string }) {
         mandate itself.
       </p>
       <p className="faint" style={{ fontSize: 12, margin: 0 }}>
-        Creation is not built in this release.
+        The allowance comes first and is where the real risk is taken, so it is
+        stated plainly before it is signed.
       </p>
     </Shell>
   );

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { Convergence, type Row } from "@/components/Convergence";
 import { ConvergenceShape } from "@/components/ConvergenceShape";
+import { Create } from "@/components/Create";
 import { Proof } from "@/components/Proof";
 import { Refusals } from "@/components/Refusals";
 import { Rules, type MandateView } from "@/components/Rules";
@@ -142,7 +143,13 @@ export default function Page() {
       {phase.k === "wrong-network" && <WrongNetwork chainId={phase.chainId} onSwitch={doSwitch} />}
       {phase.k === "not-deployed" && <NotDeployed />}
       {phase.k === "rpc-error" && <RpcError detail={phase.detail} onRetry={load} />}
-      {phase.k === "no-mandate" && <NoMandate owner={phase.owner} />}
+      {phase.k === "no-mandate" && (
+        <>
+          <NoMandate owner={phase.owner} />
+          <div style={{ height: 32 }} />
+          <Create owner={phase.owner} onDone={load} />
+        </>
+      )}
 
       {phase.k === "ready" && (
         <>
