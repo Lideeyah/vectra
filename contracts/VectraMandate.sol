@@ -98,6 +98,10 @@ contract VectraMandate is ReentrancyGuard {
         address owner;
         address agent;
         uint64 expiry;
+        /// @notice 1 at creation, incremented on every successful amendment.
+        ///         Every leg emits the version in force when it ran, which is
+        ///         what binds a leg to the target that governed it.
+        uint64 version;
         bool paused;
         bool revoked;
         uint16 driftBps;
@@ -114,13 +118,26 @@ contract VectraMandate is ReentrancyGuard {
     uint256 public nextMandateId = 1;
 
     event MandateCreated(uint256 indexed id, address indexed owner, address indexed agent);
+
+    /// @notice The full target arrays, not a hash and not a delta, so the whole
+    ///         history is reconstructible from logs alone with no archive-node
+    ///         state reads. Emitted on creation too, with an empty `previous`,
+    ///         so version 1 is on chain like every later one and reconstruction
+    ///         has no special first case.
+    event TargetsSet(
+        uint256 indexed id,
+        uint256[] previous,
+        uint256[] current,
+        uint64 version,
+        uint256 timestamp
+    );
+
     event Executed(
         uint256 indexed id, address tokenIn, address tokenOut,
-        uint256 amountIn, uint256 amountOut
+        uint256 amountIn, uint256 amountOut, uint64 version
     );
     event Paused(uint256 indexed id, bool paused);
     event Revoked(uint256 indexed id);
-    event TargetsAmended(uint256 indexed id);
     event CapsAmended(uint256 indexed id, uint256 maxLegUsdc, uint256 totalCapUsdc);
 
     error NotOwner();
@@ -165,8 +182,11 @@ contract VectraMandate is ReentrancyGuard {
         m.weightsBps = p.weightsBps;
         m.targetShares = p.targetShares;
 
+        m.version = 1;
+
         activeMandateOf[msg.sender] = id;
         emit MandateCreated(id, msg.sender, p.agent);
+        emit TargetsSet(id, new uint256[](0), p.targetShares, 1, block.timestamp);
     }
 
     function _validate(MandateParams calldata p) private view {
@@ -279,7 +299,7 @@ contract VectraMandate is ReentrancyGuard {
             m.spentUsdc += amountIn - leftover;
         }
 
-        emit Executed(id, tokenIn, tokenOut, amountIn, received);
+        emit Executed(id, tokenIn, tokenOut, amountIn, received, m.version);
     }
 
     /**
@@ -438,8 +458,11 @@ contract VectraMandate is ReentrancyGuard {
         Mandate storage m = _mandates[id];
         if (m.revoked) revert MandateInactive();
         if (targetShares.length != m.tokens.length) revert BadBasket();
+
+        uint256[] memory previous = m.targetShares;
         m.targetShares = targetShares;
-        emit TargetsAmended(id);
+        unchecked { m.version += 1; }
+        emit TargetsSet(id, previous, targetShares, m.version, block.timestamp);
     }
 
     function amendCaps(uint256 id, uint256 maxLegUsdc, uint256 totalCapUsdc)
@@ -461,12 +484,13 @@ contract VectraMandate is ReentrancyGuard {
         view
         returns (
             address owner_, address agent, uint64 expiry, bool paused, bool revoked,
-            uint16 driftBps, uint256 maxLegUsdc, uint256 totalCapUsdc, uint256 spentUsdc
+            uint16 driftBps, uint256 maxLegUsdc, uint256 totalCapUsdc, uint256 spentUsdc,
+            uint64 version
         )
     {
         Mandate storage m = _mandates[id];
         return (m.owner, m.agent, m.expiry, m.paused, m.revoked,
-                m.driftBps, m.maxLegUsdc, m.totalCapUsdc, m.spentUsdc);
+                m.driftBps, m.maxLegUsdc, m.totalCapUsdc, m.spentUsdc, m.version);
     }
 
     function basket(uint256 id)

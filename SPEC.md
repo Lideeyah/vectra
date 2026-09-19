@@ -167,6 +167,16 @@ Then it pulls `amountIn`, calls the router with `routerCalldata`, requires the r
 
 `pause(uint256 mandateId)` and `resume(uint256 mandateId)`, owner only.
 
+`amendTargets(uint256 mandateId, uint256[] targetShares)`, owner only. Targets are mutable by design: a tool a user steers must be able to change what it converges toward. The requirement is not immutability but **auditability** — a target that moves without a trace makes "distance from target" a quantity no third party can reconstruct, and tracking error measured against a target that may have been moved silently is not a measurement.
+
+Every target change emits `TargetsSet` carrying the mandate id, the **full previous array**, the **full new array**, the new version and the block timestamp. Arrays rather than a hash or a delta, so the entire history is reconstructible from logs alone with no archive-node state reads. Creation emits the same event with an empty `previous` at version 1, so reconstruction has no special first case. Each record's `previous` equals the prior record's `current`, which is what makes the chain verifiably gapless.
+
+The mandate carries a `uint64 version`, 1 at creation and incremented on every amendment, and **every leg emits the version in force when it ran**. That is what binds a trade to the target that governed it.
+
+No limit is placed on how far a target may move, and no cooldown is imposed. A movement limit would be a guess at a policy the product has not chosen, and it would not address the auditability problem in any case.
+
+**The guarantee, stated for the submission: targets may change, but never silently — every target the mandate has ever held is recoverable from the event log, and every executed leg names the version that governed it.**
+
 `revoke(uint256 mandateId)`, owner only, permanent. Does not move funds, since the contract holds none. The user separately revokes their allowances, and the interface prompts them to.
 
 View functions for mandate state, cumulative spend, and holdings relative to target in token units.

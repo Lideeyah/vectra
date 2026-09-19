@@ -227,7 +227,7 @@ contract ForkXLayerTest is Test {
         assertApproxEqAbs(IERC20(NVDAX).balanceOf(WNVDAX), ownerTokenBefore - 1e18, 2,
             "unconsumed input not returned");
 
-        (,,,,,,,, uint256 spent) = sellVectra.mandate(id);
+        (,,,,,,,, uint256 spent,) = sellVectra.mandate(id);
         assertEq(spent, 0, "a sell must not consume cap headroom");
         console2.log("sell under-consumed: cap spent stays", uint256(spent));
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {VectraMandate} from "../contracts/VectraMandate.sol";
 import {MockUSDC, MockRebasingToken, MockRouter} from "./mocks/Mocks.sol";
@@ -161,7 +161,7 @@ contract VectraMandateTest is Test {
         vm.prank(agent);
         vectra.execute(mandateId, address(usdc), address(nvda), 5e6, 1e18, cd, _none());
 
-        (,,,,,,,, uint256 spent) = vectra.mandate(mandateId);
+        (,,,,,,,, uint256 spent,) = vectra.mandate(mandateId);
         assertEq(spent, 3e6, "cap must count what was spent, not requested");
         assertEq(usdc.balanceOf(address(vectra)), 0, "unspent input retained");
         assertEq(usdc.balanceOf(owner), 1_000e6 - 3e6, "unspent input not returned");
@@ -350,6 +350,93 @@ contract VectraMandateTest is Test {
                        TARGET_SHARES + 5e18, oversized, _none());
     }
 
+    // ------------------------------------------------ target auditability
+
+    /// @notice Targets are mutable by design — a user tool must be able to
+    ///         change what it converges toward. The requirement is that they
+    ///         cannot move without a trace: the full history must be
+    ///         reconstructible from logs alone, with no archive-node state
+    ///         reads, so that "distance from target" is a quantity a third
+    ///         party can verify after the fact.
+    function test_TargetHistoryReconstructsFromLogsAlone() public {
+        vm.recordLogs();
+
+        uint256[] memory second = new uint256[](2);
+        second[0] = 11e18;
+        second[1] = 12e18;
+        vm.prank(owner);
+        vectra.amendTargets(mandateId, second);
+
+        uint256[] memory third = new uint256[](2);
+        third[0] = 21e18;
+        third[1] = 22e18;
+        vm.prank(owner);
+        vectra.amendTargets(mandateId, third);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("TargetsSet(uint256,uint256[],uint256[],uint64,uint256)");
+
+        uint256 seen;
+        uint64 lastVersion;
+        uint256[] memory reconstructed;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != sig) continue;
+            assertEq(uint256(logs[i].topics[1]), mandateId, "wrong mandate id");
+            (uint256[] memory prev, uint256[] memory cur, uint64 ver, uint256 ts) =
+                abi.decode(logs[i].data, (uint256[], uint256[], uint64, uint256));
+            seen++;
+
+            // Each record's `previous` must equal the last record's `current`,
+            // which is what makes the chain reconstructible without gaps.
+            if (seen > 1) {
+                assertEq(prev.length, reconstructed.length, "chain broken: length");
+                for (uint256 j; j < prev.length; ++j) {
+                    assertEq(prev[j], reconstructed[j], "chain broken: value");
+                }
+                assertEq(ver, lastVersion + 1, "version did not increment by one");
+            }
+            reconstructed = cur;
+            lastVersion = ver;
+            assertEq(ts, block.timestamp, "timestamp missing");
+        }
+
+        assertEq(seen, 2, "expected one record per amendment");
+        assertEq(lastVersion, 3, "version should be 3 after two amendments");
+
+        // Both target sets are recoverable exactly from the emitted arrays.
+        assertEq(reconstructed[0], 21e18);
+        assertEq(reconstructed[1], 22e18);
+
+        (,,,,,,,,, uint64 onChain) = vectra.mandate(mandateId);
+        assertEq(onChain, lastVersion, "log version disagrees with state");
+    }
+
+    /// @notice A leg must carry the version that governed it, or a log reader
+    ///         cannot tell which target a trade was converging toward.
+    function test_ExecuteEmitsTheVersionInForce() public {
+        uint256[] memory next = new uint256[](2);
+        next[0] = TARGET_SHARES;
+        next[1] = TARGET_SHARES;
+        vm.prank(owner);
+        vectra.amendTargets(mandateId, next);   // version 2
+
+        vm.recordLogs();
+        _buy(5e6, 1e18, 1e18 - 10);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256(
+            "Executed(uint256,address,address,uint256,uint256,uint64)");
+
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != sig) continue;
+            (,,,, uint64 ver) = abi.decode(
+                logs[i].data, (address, address, uint256, uint256, uint64));
+            assertEq(ver, 2, "leg did not carry the version in force");
+            found = true;
+        }
+        assertTrue(found, "no Executed event");
+    }
+
     // ------------------------------------------------------- access and caps
 
     function test_OnlyAgentCanExecute() public {
@@ -374,7 +461,7 @@ contract VectraMandateTest is Test {
         for (uint256 i; i < 10; ++i) {
             _buy(5e6, 1e17, 1e17); // 10 x $5 == $50 cap
         }
-        (,,,,,,,, uint256 spent) = vectra.mandate(mandateId);
+        (,,,,,,,, uint256 spent,) = vectra.mandate(mandateId);
         assertEq(spent, TOTAL_CAP);
 
         bytes memory cd = abi.encodeCall(

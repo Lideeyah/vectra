@@ -266,12 +266,12 @@ contract AdversarialTest is Test {
     // ==================================================== 3. CAP ACCOUNTING
 
     function test_Cap_RevertingLegDoesNotCharge() public {
-        (,,,,,,,, uint256 before) = vectra.mandate(id);
+        (,,,,,,,, uint256 before,) = vectra.mandate(id);
         bytes memory cd = abi.encodeCall(PredatoryRouter.noop, ());
         vm.prank(attacker);
         vm.expectRevert(VectraMandate.InsufficientOutput.selector);
         vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e18, cd, _none());
-        (,,,,,,,, uint256 after_) = vectra.mandate(id);
+        (,,,,,,,, uint256 after_,) = vectra.mandate(id);
         assertEq(after_, before, "a reverting leg charged the cap");
     }
 
@@ -288,7 +288,7 @@ contract AdversarialTest is Test {
             vm.prank(attacker);
             vectra.execute(id, address(usdc), address(nvda), MAX_LEG, 1e17 - 10, buy, _none());
         }
-        (,,,,,,,, uint256 spent) = vectra.mandate(id);
+        (,,,,,,,, uint256 spent,) = vectra.mandate(id);
         assertEq(spent, TOTAL_CAP, "cap not fully spent");
 
         // Now push the position above target so a sell is admissible.
@@ -303,7 +303,7 @@ contract AdversarialTest is Test {
         vm.prank(attacker);
         vectra.execute(id, address(nvda), address(usdc), 1e18, 20e6 - 10, sell, _none());
 
-        (,,,,,,,, uint256 afterSell) = vectra.mandate(id);
+        (,,,,,,,, uint256 afterSell,) = vectra.mandate(id);
         assertEq(afterSell, TOTAL_CAP, "a sell refunded cap headroom");
 
         // And buying is still refused.
