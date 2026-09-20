@@ -67,25 +67,7 @@ jobs:
           git config user.name "Lydia Solomon"
           git config user.email "lydiasolomon137@gmail.com"
 
-          if [ -z "$(git status --porcelain data)" ]; then
-            echo "Nothing new to commit."
-            exit 0
-          fi
-
-          git add data
-          git commit -m "record: $(date -u +%Y-%m-%dT%H:%MZ)"
-
-          # A concurrent or late run may have pushed since checkout. Rebase and
-          # retry rather than forcing, so no reading is ever overwritten.
-          for i in 1 2 3 4 5; do
-            if git push; then
-              echo "pushed on attempt $i"
-              exit 0
-            fi
-            echo "push rejected, rebasing (attempt $i)"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
-            sleep $((i * 3))
-          done
-
-          echo "Could not push after 5 attempts." >&2
-          exit 1
+          # One shared implementation, because there were six copies of this
+          # loop and all six swallowed a FAILED rebase — which leaves the tree
+          # mid-rebase and every later git command broken.
+          ./scripts/commit_data.sh "record: $(date -u +%Y-%m-%dT%H:%MZ)" data
