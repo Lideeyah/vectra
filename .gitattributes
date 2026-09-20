@@ -1,0 +1,19 @@
+# Append-only records get a UNION merge.
+#
+# These files are written by concurrent workflows — the recorder runs a
+# long-lived job while the agent, discovery and dev-leg all commit to data/ —
+# and every writer only ever appends. When two jobs append different rows, a
+# normal rebase stops with a conflict and leaves the repository mid-rebase.
+# Every subsequent git command in that job then fails, and because the
+# recorder's flush deliberately survives push failures, it kept recording and
+# silently stopped committing for the rest of its run. Two multi-hour gaps in
+# the price series came from exactly that.
+#
+# A union merge keeps both sides' lines, which is the correct resolution for an
+# append-only log and turns the conflict into a non-event.
+#
+# ONLY append-only line-based files belong here. A union merge on JSON would
+# produce a file with both versions concatenated and no valid syntax, so
+# latest.json, constituents.json and the rest are deliberately absent.
+data/prices.csv merge=union
+data/agent/distance.csv merge=union

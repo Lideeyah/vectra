@@ -144,19 +144,77 @@ def quote_row(cyc, bucket, usdc, asset):
     return row
 
 
+def _clear_stuck_rebase():
+    """Undo a conflicted rebase before it poisons the rest of the run.
+
+    This is the failure that cost two multi-hour holes in the series. On a push
+    race the flush pulls with --rebase; if that rebase conflicts on the CSV it
+    stops and leaves the repository mid-rebase. From then on EVERY git command
+    fails, the flush catches it, prints "ignored", and carries on recording into
+    a file it will never commit. The job looks perfectly healthy — it is alive,
+    it is quoting, it is writing rows — and produces nothing for hours.
+
+    .gitattributes now gives the append-only files a union merge, so the
+    conflict should not happen at all. This is the second line: if the tree is
+    ever left mid-rebase for any reason, the next flush clears it rather than
+    inheriting it for the rest of the run.
+    """
+    inprogress = subprocess.run(
+        ["git", "rev-parse", "--git-path", "rebase-merge"],
+        capture_output=True, text=True).stdout.strip()
+    apply_dir = subprocess.run(
+        ["git", "rev-parse", "--git-path", "rebase-apply"],
+        capture_output=True, text=True).stdout.strip()
+    if not any(p and os.path.isdir(p) for p in (inprogress, apply_dir)):
+        return False
+    print("    WARNING: repository was left mid-rebase; aborting it so this "
+          "job can commit again", file=sys.stderr)
+
+    # `git rebase --abort` restores the working tree, which DISCARDS rows
+    # appended since the rebase stopped. The series cannot be backfilled, so
+    # those readings are kept across the abort and re-appended afterwards.
+    # Conflict markers are stripped: in this state the file physically contains
+    # <<<<<<<, ======= and >>>>>>> lines, and they are not observations.
+    saved = []
+    if CSV_PATH.exists():
+        saved = [ln for ln in CSV_PATH.read_text().splitlines()
+                 if ln and not ln.startswith(("<<<<<<<", "=======", ">>>>>>>"))]
+
+    subprocess.run(["git", "rebase", "--abort"], capture_output=True)
+
+    if saved:
+        current = CSV_PATH.read_text().splitlines() if CSV_PATH.exists() else []
+        have = set(current)
+        recovered = [ln for ln in saved
+                     if ln not in have and not ln.startswith("ts_utc")]
+        if recovered:
+            with open(CSV_PATH, "a", newline="") as fh:
+                fh.write("\n".join(recovered) + "\n")
+            print(f"    recovered {len(recovered)} row(s) that the abort would "
+                  f"otherwise have discarded", file=sys.stderr)
+    return True
+
+
+_consecutive_flush_failures = 0
+
+
 def flush_commit(label):
     """Commit and push what has been recorded so far.
 
     A long job that dies late must not lose everything it gathered. The series
     cannot be backfilled, so progress is made durable during the run rather than
-    only at the end. Failures here are logged and ignored: losing a push is
-    recoverable, crashing the recorder is not.
+    only at the end. A single failure is survivable — losing one push is
+    recoverable, crashing the recorder is not — but REPEATED failure is not the
+    same event, and it used to read identically in the log. It now escalates.
     """
+    global _consecutive_flush_failures
     if os.environ.get("VECTRA_AUTOCOMMIT") != "1":
         return
+    _clear_stuck_rebase()
     try:
         if not subprocess.run(["git", "status", "--porcelain", "data"],
                               capture_output=True, text=True).stdout.strip():
+            _consecutive_flush_failures = 0
             return
         subprocess.run(["git", "config", "user.name", "Lydia Solomon"], check=True)
         subprocess.run(["git", "config", "user.email", "lydiasolomon137@gmail.com"],
@@ -166,12 +224,34 @@ def flush_commit(label):
         for attempt in range(3):
             if subprocess.run(["git", "push", "-q"]).returncode == 0:
                 print(f"    pushed {label}")
+                _consecutive_flush_failures = 0
                 return
             subprocess.run(["git", "pull", "--rebase", "-q", "--autostash"])
             time.sleep(3 * (attempt + 1))
-        print(f"    push failed for {label}; will retry next flush", file=sys.stderr)
+        _consecutive_flush_failures += 1
+        _report_flush_failure(label, "push failed")
+        return
     except Exception as e:
-        print(f"    flush error (ignored): {e!r}", file=sys.stderr)
+        _consecutive_flush_failures += 1
+        _report_flush_failure(label, repr(e))
+
+
+def _report_flush_failure(label, detail):
+    """Say plainly when nothing is reaching the repository.
+
+    A run that cannot commit is not recording anything that will survive the
+    runner, so after two failures in a row this stops reading like routine
+    noise. Everything gathered so far is still on disk and a later flush will
+    carry it, which is why the job keeps going rather than exiting.
+    """
+    n = _consecutive_flush_failures
+    if n < 2:
+        print(f"    flush failed for {label}: {detail}; will retry next flush",
+              file=sys.stderr)
+        return
+    print(f"    NOTHING HAS BEEN COMMITTED FOR {n} CONSECUTIVE FLUSHES "
+          f"({n * COMMIT_EVERY * CADENCE_MIN} min of recording is on this "
+          f"runner and nowhere else) — last error: {detail}", file=sys.stderr)
 
 
 def record_bucket(cyc, usdc, assets):
