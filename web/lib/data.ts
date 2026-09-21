@@ -24,7 +24,7 @@ export type Constituents = {
   constituents: Constituent[];
 };
 
-export type Refusal = { token: string; reason: string };
+export type Refusal = { token: string; reason: string; standing?: boolean };
 
 export type AgentCycle = {
   ts: string;
@@ -234,6 +234,11 @@ export type DistanceRow = {
   legSymbol: string;
   legUsd: number | null;
   distanceAfter: number | null;
+  executed: boolean;
+  txHash: string;
+  bindingConstraint: string;
+  /** Share-space distance — the metric shown and plotted. See Convergence. */
+  shareDistanceBps: number | null;
 };
 
 export async function loadDistance(limit = 600): Promise<DistanceRow[]> {
@@ -261,6 +266,10 @@ export async function loadDistance(limit = 600): Promise<DistanceRow[]> {
           legSymbol: at(c, "leg_symbol"),
           legUsd: num(at(c, "leg_usd")),
           distanceAfter: num(at(c, "distance_after")),
+          executed: at(c, "executed") === "true",
+          txHash: at(c, "tx_hash"),
+          bindingConstraint: at(c, "binding_constraint"),
+          shareDistanceBps: num(at(c, "share_distance_bps")),
         };
       })
       .filter((r) => r.ts);

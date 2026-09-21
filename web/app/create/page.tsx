@@ -59,7 +59,31 @@ export default function Create() {
     };
     window.addEventListener("eip6963:announceProvider", onAnnounce);
     window.dispatchEvent(new Event("eip6963:requestProvider"));
-    return () => window.removeEventListener("eip6963:announceProvider", onAnnounce);
+
+    // Ask again a few times. Extensions announce when they are ready, which can
+    // be after this component mounts, and a single request that arrives too
+    // early looks exactly like having no wallet installed.
+    const retries = [150, 500, 1200].map((ms) =>
+      setTimeout(() => window.dispatchEvent(new Event("eip6963:requestProvider")), ms),
+    );
+
+    // Last resort: a wallet that does not implement EIP-6963 still claims
+    // window.ethereum, and being unable to name it is better than not offering
+    // it at all.
+    const fallback = setTimeout(() => {
+      if (found.length) return;
+      const legacy = (window as unknown as { ethereum?: unknown }).ethereum;
+      if (legacy) {
+        found.push({ name: "Injected wallet", provider: legacy });
+        setWallets([...found]);
+      }
+    }, 1500);
+
+    return () => {
+      window.removeEventListener("eip6963:announceProvider", onAnnounce);
+      retries.forEach(clearTimeout);
+      clearTimeout(fallback);
+    };
   }, []);
 
   const eth = () => picked?.provider as Eth;

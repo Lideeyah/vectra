@@ -1,0 +1,70 @@
+name: deploy interface
+
+# Publishes the interface to GitHub Pages.
+#
+# The app is entirely client-rendered — it reads chain state through the
+# browser's own RPC calls and fetches the recorder's committed files directly —
+# so there is no server to host and a static export is the whole product.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
+
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      - name: Build the static export
+        working-directory: web
+        env:
+          # A project page is served under /<repo>, so every asset URL needs
+          # the prefix. Set here rather than committed, so moving to a root
+          # domain later is one variable.
+          NEXT_PUBLIC_BASE_PATH: /vectra
+          NEXT_PUBLIC_VECTRA_ADDRESS: "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"
+          NEXT_PUBLIC_RPC: "https://rpc.xlayer.tech"
+          # DELIBERATELY UNSET: NEXT_PUBLIC_ALLOW_FORK_HISTORY.
+          # next.config.mjs throws if it is "true" in a production build, so
+          # fork-origin legs cannot reach the deployed site by accident.
+        run: |
+          # Always from clean. A stale .next left by a dev server produced a
+          # build that reported success while exporting only the 404 page.
+          rm -rf .next out
+          npm run build
+          test -f out/index.html || { echo "::error::index.html missing from export"; exit 1; }
+          # Pages runs Jekyll otherwise, which strips _next/.
+          touch out/.nojekyll
+          echo "exported:"; find out -name "*.html" | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: web/out }
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

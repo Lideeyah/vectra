@@ -509,6 +509,32 @@ def build_payload(leg):
             "routes": okx_dex.routes_of(d)}, None
 
 
+def share_distance_bps(state):
+    """Distance in SHARE space — the metric the interface shows and the chart
+    plots, and the one that needs no prices.
+
+    Sum over positions of |held - target| / target, in bps. Targets are held in
+    shares, so this is the gap to the mandate as the CONTRACT states it, and a
+    browser can compute it from chain reads alone.
+
+    The agent decides on a WEIGHT-space distance instead, because choosing
+    between legs requires comparing dollars and that requires prices. Both are
+    recorded; only this one is displayed, because two numbers sharing one word
+    is worse than either.
+    """
+    ps = state["positions"]
+    if not ps:
+        return None
+    total = 0.0
+    for p in ps:
+        tgt = p.get("targetShares")
+        held = p.get("shares")
+        if not tgt or held is None:
+            return None
+        total += abs(held - tgt) / tgt * 10_000
+    return round(total, 2)
+
+
 def total_distance(state):
     """Total distance from target for the WHOLE basket, or None.
 
@@ -528,10 +554,11 @@ def total_distance(state):
 DISTANCE_CSV = LOG_DIR / "distance.csv"
 DISTANCE_HEADER = ("ts_utc,status,distance_bps,total_usd,priced,positions,"
                    "leg_direction,leg_symbol,leg_usd,distance_after,"
-                   "executed,tx_hash,binding_constraint\n")
+                   "executed,tx_hash,binding_constraint,share_distance_bps\n")
 
 
-def append_distance(started, state, leg, dist, execution=None):
+def append_distance(started, state, leg, dist, execution=None,
+                    share_dist=None):
     """One row per cycle, appended, never rewritten.
 
     The archives are timestamped files and raw file hosting serves no directory
@@ -561,6 +588,10 @@ def append_distance(started, state, leg, dist, execution=None):
         "true" if (execution or {}).get("executed") else "false",
         (execution or {}).get("txHash", "") or "",
         (leg or {}).get("bindingConstraint", "") or "",
+        # The displayed metric. Needs no prices, so it is present even on a
+        # cycle that could not quote — which is exactly when the weight-space
+        # number is NA and the chart would otherwise have nothing to draw.
+        "NA" if share_dist is None else share_dist,
     ]) + "\n"
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -676,13 +707,26 @@ def main():
     print(f"\nUSDC {state['usdcValueUsd']:.2f}   invested {state['investedUsd']:.2f}"
           f"   total {state['totalUsd']:.2f}")
 
-    # Documented gap: the issuer asks integrations to pause around multiplier
-    # activation, and those timestamps are not obtainable (SPEC 16). Recorded
-    # every cycle so the omission is visible rather than silent.
+    # A STANDING limitation, not a refusal of this cycle.
+    #
+    # The issuer asks integrations to pause trading for a few minutes either
+    # side of a multiplier activation, and those activation timestamps are not
+    # published anywhere this agent can read (SPEC 16). So the agent does not
+    # pause: legs continue straight through those windows.
+    #
+    # It is recorded on every cycle because it is true on every cycle, and it
+    # appears alongside cycles that executed because those cycles DID execute
+    # without the pause. Wording it as a failure would be wrong twice over —
+    # nothing failed, and what is actually declined is the pause itself.
     state["refusals"].append({
         "token": "*",
-        "reason": "multiplier activation windows unavailable — cannot honour "
-                  "the issuer's pause requirement (SPEC 14, open item)"})
+        "standing": True,
+        "reason": "Does not pause around rebase activation. The issuer asks "
+                  "integrations to halt briefly either side of a multiplier "
+                  "activation; those timestamps are not published anywhere "
+                  "readable, so legs run through those windows rather than "
+                  "waiting them out. Standing limitation, not a refusal of "
+                  "this cycle (SPEC 14, open item)."})
 
     leg, why_not = select_leg(m, state)
     payload, payload_err = (None, None)
@@ -736,7 +780,10 @@ def main():
     dist = total_distance(state)
     print("\ndistance " + ("NA (not every position priced)" if dist is None
                             else f"{dist}bps"))
-    print("series += " + append_distance(started, state, leg, dist, execution))
+    share_dist = share_distance_bps(state)
+    print(f"share-space distance {share_dist}bps (the displayed metric)")
+    print("series += " + append_distance(started, state, leg, dist, execution,
+                                         share_dist))
 
     print(f"\nlogged {out} and {LOG_DIR / 'latest.json'}")
     return 0

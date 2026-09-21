@@ -30,14 +30,22 @@ export function Distance({ toleranceBps }: { toleranceBps?: number }) {
 
   if (rows === null) return null;
 
-  const measured = rows.filter((r) => r.distanceBps !== null);
+  // The SHARE-space metric — the one the hero shows. The weight-space number
+  // is what the agent decides on and stays in the cycle log; plotting a
+  // different number from the one displayed above it is how one word ends up
+  // meaning two things.
+  const measured = rows.filter((r) => r.shareDistanceBps !== null);
   const unmeasured = rows.length - measured.length;
 
   return (
-    <section style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
+    <section data-testid="distance-chart" style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 14 }}>
         DISTANCE FROM TARGET, OVER TIME
       </div>
+      <p className="faint" style={{ fontSize: 12, margin: "0 0 12px", maxWidth: 560 }}>
+        The same measure as the figure above: each holding&apos;s gap to its
+        target, in shares, summed.
+      </p>
 
       {measured.length < 2 ? (
         <p className="dim" style={{ fontSize: 13, maxWidth: 640 }}>
@@ -90,7 +98,7 @@ function Plot({
   const t1 = Math.max(...times);
   const span = Math.max(1, t1 - t0);
 
-  const values = measured.map((r) => r.distanceBps as number);
+  const values = measured.map((r) => r.shareDistanceBps as number);
   // The tolerance line must be inside the frame, or a chart showing every
   // point above tolerance looks identical to one showing every point below it.
   const hi = Math.max(...values, toleranceBps ?? 0) * 1.1 || 1;
@@ -104,7 +112,7 @@ function Plot({
   const segments: DistanceRow[][] = [];
   let run: DistanceRow[] = [];
   for (const r of rows) {
-    if (r.distanceBps === null) {
+    if (r.shareDistanceBps === null) {
       if (run.length) segments.push(run);
       run = [];
     } else {
@@ -141,7 +149,7 @@ function Plot({
 
         {/* breaks: a visible gap, labelled, rather than a joined line */}
         {rows.map((r, i) =>
-          r.distanceBps === null ? (
+          r.shareDistanceBps === null ? (
             <line key={`gap-${i}`} x1={x(r.ts)} x2={x(r.ts)} y1={PAD.t} y2={H - PAD.b}
                   stroke="currentColor" strokeWidth="1" opacity="0.12" />
           ) : null,
@@ -153,15 +161,15 @@ function Plot({
             fill="none"
             stroke="var(--cyan)"
             strokeWidth="1.5"
-            points={seg.map((r) => `${x(r.ts)},${y(r.distanceBps as number)}`).join(" ")}
+            points={seg.map((r) => `${x(r.ts)},${y(r.shareDistanceBps as number)}`).join(" ")}
           />
         ))}
 
         {/* a cycle that executed a leg is marked, so movement can be read
             against the action that caused it rather than assumed */}
         {rows.map((r, i) =>
-          r.distanceBps !== null && r.legSymbol ? (
-            <circle key={`leg-${i}`} cx={x(r.ts)} cy={y(r.distanceBps)} r="3"
+          r.shareDistanceBps !== null && r.legSymbol ? (
+            <circle key={`leg-${i}`} cx={x(r.ts)} cy={y(r.shareDistanceBps)} r="3"
                     fill="var(--cyan)">
               <title>{`${r.legDirection} ${r.legSymbol} $${r.legUsd ?? "?"} — ${r.ts}`}</title>
             </circle>
@@ -170,7 +178,7 @@ function Plot({
 
         {measured.length > 0 && (
           <circle cx={x(measured[measured.length - 1].ts)}
-                  cy={y(measured[measured.length - 1].distanceBps as number)}
+                  cy={y(measured[measured.length - 1].shareDistanceBps as number)}
                   r="2" fill="var(--cyan)" />
         )}
       </svg>

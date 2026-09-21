@@ -26,17 +26,17 @@ export function Rules({ m, rateBps }: { m: MandateView; rateBps: number | null }
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
 
   return (
-    <section style={{ marginBottom: 48 }}>
-      <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 16 }}>
+    <section data-testid="rules" style={{ marginBottom: 48 }}>
+      <div className="dim" data-testid="rules-heading" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 16 }}>
         WHAT THE AGENT MAY DO — AS THE CONTRACT HOLDS IT
       </div>
 
       <div style={{ border: "1px solid var(--bone-12)", padding: 18, marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, gap: 12 }}>
           <span style={{ fontSize: 14 }}>Total that may ever be spent</span>
-          <span className="mono">${usdc(m.spentUsdc)} / ${usdc(m.totalCapUsdc)}</span>
+          <span className="mono" data-testid="cap-spent">${usdc(m.spentUsdc)} / ${usdc(m.totalCapUsdc)}</span>
         </div>
-        <div className="bar-track">
+        <div className="bar-track" data-testid="cap-bar">
           <div className="bar-fill" style={{ width: `${pct}%` }} />
         </div>
         <p className="dim" style={{ fontSize: 13, margin: "12px 0 0" }}>
@@ -49,6 +49,7 @@ export function Rules({ m, rateBps }: { m: MandateView; rateBps: number | null }
       </div>
 
       <Limit
+        testId="rule-max-leg"
         label="Maximum in a single purchase"
         value={`$${usdc(m.maxLegUsdc)}`}
         note="Bounds one buy. It does not bound a sell — sizing a sell in dollars would need a price the contract does not have."
@@ -56,7 +57,8 @@ export function Rules({ m, rateBps }: { m: MandateView; rateBps: number | null }
       <Limit
         label="Maximum movement per leg"
         value={rateBps === null ? "—" : bps(rateBps)}
-        note="Of that token's target, in shares, in either direction. This is the only limit that bounds a sell, and it is why one oversized leg cannot empty a position."
+        note="Of that token's target, in shares, in either direction. This is the only limit that bounds a sell, and it is why one oversized leg cannot empty a position. Set at creation and unchangeable — but the contract exposes no getter for it, so unlike every other figure here it is configuration rather than a chain read."
+        testId="rule-rate"
       />
       <Limit
         label="Drift tolerance"
@@ -72,12 +74,12 @@ export function Rules({ m, rateBps }: { m: MandateView; rateBps: number | null }
   );
 }
 
-function Limit({ label, value, note }: { label: string; value: string; note: string }) {
+function Limit({ label, value, note, testId }: { label: string; value: string; note: string; testId?: string }) {
   return (
-    <div style={{ padding: "14px 0", borderTop: "1px solid var(--bone-12)" }}>
+    <div data-testid={testId} style={{ padding: "14px 0", borderTop: "1px solid var(--bone-12)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <span style={{ fontSize: 14 }}>{label}</span>
-        <span className="mono">{value}</span>
+        <span className="mono" data-testid={testId ? `${testId}-value` : undefined}>{value}</span>
       </div>
       <p className="dim" style={{ fontSize: 12, margin: "6px 0 0", maxWidth: 620 }}>{note}</p>
     </div>

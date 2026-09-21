@@ -11,7 +11,7 @@ import { ago, elapsed } from "@/lib/format";
  */
 export function Refusals({ cycle, stale }: { cycle: AgentCycle | null; stale: boolean }) {
   return (
-    <section style={{ marginBottom: 48 }}>
+    <section data-testid="refusals" style={{ marginBottom: 48 }}>
       <div
         className="dim"
         style={{
@@ -53,7 +53,7 @@ export function Refusals({ cycle, stale }: { cycle: AgentCycle | null; stale: bo
       {cycle && (
         <>
           {cycle.leg ? (
-            <div style={{ borderLeft: "2px solid var(--cyan)", paddingLeft: 14, marginBottom: 18 }}>
+            <div data-testid="agent-leg" style={{ borderLeft: "2px solid var(--cyan)", paddingLeft: 14, marginBottom: 18 }}>
               <div className="mono cyan" style={{ fontSize: 14 }}>
                 {cycle.leg.direction.toUpperCase()} {cycle.leg.symbol} · $
                 {cycle.leg.amountUsd.toFixed(2)}
@@ -82,6 +82,8 @@ export function Refusals({ cycle, stale }: { cycle: AgentCycle | null; stale: bo
           {cycle.refusals.map((r, i) => (
             <div
               key={i}
+              data-testid="refusal-row"
+              data-token={r.token}
               style={{
                 display: "flex",
                 gap: 12,
@@ -91,7 +93,7 @@ export function Refusals({ cycle, stale }: { cycle: AgentCycle | null; stale: bo
               }}
             >
               <span className="mono faint" style={{ minWidth: 68 }}>
-                {r.token === "*" ? "ALL" : r.token}
+                {r.standing ? "STANDING" : r.token === "*" ? "ALL" : r.token}
               </span>
               <span className="dim">{r.reason}</span>
             </div>

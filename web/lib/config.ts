@@ -33,3 +33,15 @@ export const DATA_BASE =
 
 export const explorerTx = (h: string) => `${CHAIN.explorer}/tx/${h}`;
 export const explorerAddress = (a: string) => `${CHAIN.explorer}/address/${a}`;
+
+/**
+ * maxLegBpsOfTarget — the rate bound.
+ *
+ * NOT a chain read, and the interface says so on screen. The contract exposes
+ * no getter for it (SPEC 16), so this is the value set at creation. It is
+ * immutable after creation and no function changes it, which is why showing it
+ * is safe; but it is the one figure here that cannot be re-derived from chain,
+ * and a number presented as a contract read when it is configuration would be
+ * the exact dishonesty the rest of this interface avoids.
+ */
+export const RATE_BPS = Number(process.env.NEXT_PUBLIC_RATE_BPS ?? 2000);

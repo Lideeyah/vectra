@@ -35,7 +35,7 @@ export function Legs() {
   const onMainnet = h?.origin === "mainnet";
 
   return (
-    <section style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
+    <section data-testid="legs" style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 14 }}>
         LEGS EXECUTED
       </div>
@@ -95,7 +95,7 @@ function Amendments({ h }: { h: History | null }) {
   if (rows.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 32 }}>
+    <div data-testid="target-history" style={{ marginTop: 32 }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 6 }}>
         TARGET HISTORY
       </div>
@@ -108,7 +108,7 @@ function Amendments({ h }: { h: History | null }) {
         </p>
       )}
       {rows.map((a) => (
-        <div key={a.txHash} style={{ padding: "12px 0", borderTop: "1px solid var(--bone-12)" }}>
+        <div key={a.txHash} data-testid="amendment-row" style={{ padding: "12px 0", borderTop: "1px solid var(--bone-12)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13 }}>
               mandate {a.id} ·{" "}
@@ -167,7 +167,7 @@ function LegRow({ leg, linkable }: { leg: Leg; linkable: boolean }) {
   const sold = leg.tokenIn.toLowerCase() !== USDC.toLowerCase();
 
   return (
-    <div style={{ padding: "12px 0", borderTop: "1px solid var(--bone-12)" }}>
+    <div data-testid="leg-row" style={{ padding: "12px 0", borderTop: "1px solid var(--bone-12)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13 }}>
           {sold ? "Sold" : "Bought"}{" "}

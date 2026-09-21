@@ -14,7 +14,7 @@ import { Rules, type MandateView } from "@/components/Rules";
 import {
   LockedWallet, NoMandate, NotDeployed, NoWallet, RpcError, UnfundedMandate, WrongNetwork,
 } from "@/components/States";
-import { CHAIN, DATA_BASE, VECTRA_ADDRESS } from "@/lib/config";
+import { CHAIN, DATA_BASE, RATE_BPS, VECTRA_ADDRESS } from "@/lib/config";
 import { connect, contractDeployed, switchToXLayer, walletState } from "@/lib/chain";
 import { readActiveMandateOf, readMandate, readPosition, readSymbols } from "@/lib/mandate";
 import { loadLatestCycle, type AgentCycle } from "@/lib/data";
@@ -172,7 +172,7 @@ export default function Page() {
           {unfunded && <UnfundedMandate />}
           <Convergence rows={phase.rows} toleranceBps={phase.m.driftBps} />
           <Refusals cycle={cycle} stale={stale} />
-          <Rules m={phase.m} rateBps={null} />
+          <Rules m={phase.m} rateBps={RATE_BPS} />
           <Controls
             owner={phase.owner}
             id={phase.id}

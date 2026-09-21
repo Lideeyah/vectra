@@ -34,14 +34,25 @@ export function Convergence({
   });
 
   return (
-    <section style={{ marginBottom: 48 }}>
+    <section data-testid="convergence" style={{ marginBottom: 48 }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 12 }}>
         TOTAL DISTANCE FROM TARGET
       </div>
+      {/* Name the metric. The agent chooses legs on a weight-space distance
+          because comparing legs needs dollars; this one needs no prices and is
+          the gap to the mandate as the contract states it, in shares. Both
+          existed before and both were called "distance", which is worse than
+          either. This is the one that is displayed and the one the chart
+          plots. */}
+      <p className="faint" data-testid="distance-metric" style={{ fontSize: 12, margin: "0 0 12px", maxWidth: 560 }}>
+        Sum of each holding&apos;s gap to its target, in shares, as a share of
+        that target. Every figure is a chain read — no prices are involved.
+      </p>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
         <div
           className="mono"
+          data-testid="distance-hero"
           style={{
             fontSize: "clamp(48px, 12vw, 96px)",
             lineHeight: 1,
@@ -66,7 +77,8 @@ export function Convergence({
           r.target === 0n ? 0 : Math.min(200, Number((r.current * 10000n) / r.target) / 100);
         const gap = over ? r.current - r.target : r.target - r.current;
         return (
-          <div key={r.address} style={{ padding: "18px 0", borderBottom: "1px solid var(--bone-12)" }}>
+          <div key={r.address} data-testid="convergence-row" data-symbol={r.symbol}
+               style={{ padding: "18px 0", borderBottom: "1px solid var(--bone-12)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, gap: 12 }}>
               <span className="mono" style={{ fontSize: 15 }}>{r.symbol}</span>
               <span className="mono dim" style={{ fontSize: 13 }}>

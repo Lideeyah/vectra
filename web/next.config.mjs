@@ -27,5 +27,28 @@ if (
   );
 }
 
+/**
+ * Static export.
+ *
+ * Every page is a client component and nothing is rendered on a server: the
+ * interface reads chain state through the browser's own RPC calls and fetches
+ * the recorder's committed files directly. So there is no server to host, and
+ * a static export can be served from GitHub Pages without a second account or
+ * a build box that could drift from this one.
+ *
+ * basePath is required because this is a project page served under /vectra
+ * rather than at a domain root. It is set from the environment so a future
+ * move to a root domain is one variable, not a code change.
+ */
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 /** @type {import('next').NextConfig} */
-export default { reactStrictMode: true };
+export default {
+  reactStrictMode: true,
+  output: "export",
+  basePath,
+  assetPrefix: basePath || undefined,
+  // Pages serves /route/ as /route/index.html.
+  trailingSlash: true,
+  images: { unoptimized: true },
+};

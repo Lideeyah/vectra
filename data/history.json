@@ -1,0 +1,61 @@
+{
+  "origin": "mainnet",
+  "chainId": 196,
+  "note": "X Layer mainnet",
+  "legs": [
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "217852",
+      "amountOut": "970584900049088",
+      "version": 1,
+      "txHash": "0xe40c4694fa558a3a9c80b81e7b529e9f7822a1d2319e0a7c4280609ac9d4d611",
+      "blockNumber": 71218639,
+      "timestamp": 1789987675
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "217966",
+      "amountOut": "970562890948529",
+      "version": 1,
+      "txHash": "0x31a03b66589377a24810e2b6caa0988d324d6a4b181c92f41100dda91b27238f",
+      "blockNumber": 71218954,
+      "timestamp": 1789987990
+    }
+  ],
+  "amendments": [
+    {
+      "id": "1",
+      "previous": [],
+      "current": [
+        "6055876421789847",
+        "3570920269471138",
+        "3924013832507040"
+      ],
+      "version": 1,
+      "timestamp": 1789986193,
+      "txHash": "0xc4e3ae3f3c3e8530d9fc0b0a21b2542a0d20c7bf4196672302418df93fb4bb79",
+      "blockNumber": 71217157
+    },
+    {
+      "id": "1",
+      "previous": [
+        "6055876421789847",
+        "3570920269471138",
+        "3924013832507040"
+      ],
+      "current": [
+        "5365020579939101",
+        "3163548824427970",
+        "3476361388686300"
+      ],
+      "version": 2,
+      "timestamp": 1789988182,
+      "txHash": "0x0e9a087e54d4c6db21f253e299387214e4680c5c05ad41a288701ac2770f1b0b",
+      "blockNumber": 71219146
+    }
+  ]
+}

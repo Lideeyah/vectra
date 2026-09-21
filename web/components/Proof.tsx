@@ -9,7 +9,7 @@ import { CHAIN, ROUTER, SPENDER, USDC, VECTRA_ADDRESS, explorerAddress } from "@
  */
 export function Proof({ deployed, dataBase }: { deployed: boolean; dataBase: string }) {
   return (
-    <section style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
+    <section data-testid="proof" style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
       <div className="dim" style={{ fontSize: 12, letterSpacing: "0.08em", marginBottom: 14 }}>
         WHERE EVERY NUMBER COMES FROM
       </div>
@@ -36,7 +36,7 @@ export function Proof({ deployed, dataBase }: { deployed: boolean; dataBase: str
 
 function Row({ label, value, href, note }: { label: string; value: string; href: string; note: string }) {
   return (
-    <div style={{ padding: "10px 0", borderTop: "1px solid var(--bone-12)" }}>
+    <div data-testid="proof-row" data-label={label} style={{ padding: "10px 0", borderTop: "1px solid var(--bone-12)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13 }}>{label}</span>
         <a className="mono" style={{ fontSize: 12, wordBreak: "break-all" }} href={href} target="_blank" rel="noreferrer">
