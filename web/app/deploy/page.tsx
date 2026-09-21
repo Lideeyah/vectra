@@ -4,7 +4,7 @@ import { useState } from "react";
 import { encodeAbiParameters, getContractAddress, keccak256, type Address, type Hash } from "viem";
 import { VECTRA_CREATION_BYTECODE } from "@/lib/bytecode.generated";
 import { CHAIN, ROUTER, SPENDER, USDC, VECTRA_ADDRESS } from "@/lib/config";
-import { connect, injected, publicClient, walletState, xlayer } from "@/lib/chain";
+import { connect, injected, publicClient, switchToXLayer, walletState, xlayer } from "@/lib/chain";
 import { createWalletClient, custom } from "viem";
 
 /**
@@ -109,9 +109,25 @@ export default function Deploy() {
         <span className="mono">{VECTRA_ADDRESS}</span>.
       </p>
 
-      <button className="btn" onClick={run} disabled={busy} style={{ marginTop: 16 }}>
-        {busy ? "deploying…" : "Deploy"}
-      </button>
+      <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              await switchToXLayer();
+              say(`switched to ${CHAIN.name}`);
+            } catch (e) {
+              say(`switch failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }}
+        >
+          Switch to {CHAIN.name}
+        </button>
+        <button className="btn" onClick={run} disabled={busy}>
+          {busy ? "deploying…" : "Deploy"}
+        </button>
+      </div>
 
       {log.length > 0 && (
         <pre className="mono" style={{ fontSize: 12, marginTop: 20, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
