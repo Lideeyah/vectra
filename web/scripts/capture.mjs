@@ -47,22 +47,56 @@ const SOURCE_PAGE =
 const FPS = 30;
 const W = 1920, H = 1080;
 /**
- * The BROWSER is narrower than the frame on purpose.
+ * The viewport IS the frame: 1920x1080, the same aspect as the output.
  *
- * The app's content column is 1120px wide. Captured at 1920 it sits in a sea
- * of empty background and every value is small. Captured at 1280 it fills the
- * width, and ffmpeg scales the result up to 1080p — so the text gets bigger
- * without anything being cropped.
+ * Earlier versions screenshotted individual elements, whose shapes are nothing
+ * like 16:9, then scaled them into a 16:9 frame and padded the difference.
+ * That is what produced a thick black box around the video. Capturing the
+ * viewport instead means every still already fills the frame edge to edge, and
+ * assembly is a straight copy rather than a fit-and-pad.
+ *
+ * Elements larger than the viewport are handled by zooming the PAGE down until
+ * they fit, which keeps them whole and still fills the frame.
  */
-const VW = 1280, VH = 860;
-/** Breathing room on every side of every shot. */
-const MARGIN = 64;
+const VW = 1920, VH = 1080;
+/** Space between the subject and the frame edge, in page pixels. */
+const MARGIN = 56;
 
 const problems = [];
 function need(ok, what) { if (!ok) problems.push(what); return ok; }
 
 let frameNo = 0;
 const timeline = [];   // { file, frames }
+
+/**
+ * Re-render ONE shot without re-recording the film.
+ *
+ *   ./scripts/capture.sh --only convergence
+ *
+ * Each shot's stills are remembered in a manifest, so fixing a bad twelve
+ * seconds costs twelve seconds of capture instead of three minutes of it.
+ * Without the flag everything is captured fresh.
+ */
+const ONLY = (process.argv.find((a) => a.startsWith("--only")) ?? "")
+  .replace(/^--only[= ]?/, "") || null;
+const MANIFEST = path.join(OUT, "shots.json");
+const cached = existsSync(MANIFEST)
+  ? JSON.parse(readFileSync(MANIFEST, "utf8")) : {};
+const manifest = {};
+
+async function shot(name, fn) {
+  if (ONLY && ONLY !== name && cached[name]?.length
+      && cached[name].every((e) => existsSync(e.file))) {
+    manifest[name] = cached[name];
+    timeline.push(...cached[name]);
+    console.log(`  reusing ${name} (${cached[name].length} still(s))`);
+    return;
+  }
+  const from = timeline.length;
+  await fn();
+  manifest[name] = timeline.slice(from);
+  console.log(`  captured ${name} (${manifest[name].length} still(s))`);
+}
 
 /** One still, held for `seconds`. */
 async function hold(page, seconds, { clip } = {}) {
@@ -104,24 +138,46 @@ async function freeze(page) {
 }
 
 /**
- * Shoot one element, filling the frame.
+ * Frame one element, filling the viewport.
  *
- * NOT a CSS transform on a clone — that was the first attempt and it clipped:
- * a scaled element overflows its container on both sides, so the hero number
- * lost its leading digits and the token names disappeared off the edge. An
- * element screenshot cannot clip, because the element defines the bounds.
- * ffmpeg then scales it to 1080p and pads whatever is left.
+ * The page is zoomed so the subject fits with a margin, then the VIEWPORT is
+ * captured — already 16:9, so assembly never has to pad it into bars. Two
+ * earlier approaches failed here: a CSS transform on a clone, which overflowed
+ * and clipped the leading digits off the hero; and an element screenshot,
+ * which was the right pixels but the wrong shape and letterboxed.
  */
 async function shotOf(page, selector, seconds) {
+  // Zoom the page so the subject fills the frame, then shoot the VIEWPORT.
+  // The result is already 16:9, so nothing is scaled into bars afterwards.
+  await page.evaluate(() => { document.documentElement.style.zoom = "1"; });
   const el = page.locator(selector).first();
   await el.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(250);
-  // The whole element, even when it is taller than the viewport — a clip
-  // region would be capped at the viewport and cut the bottom off the rules
-  // block. Breathing room is added when the frame is normalised.
+
+  let box = await el.boundingBox();
+  if (box) {
+    const z = Math.min(
+      (VH - MARGIN * 2) / box.height,
+      (VW - MARGIN * 2) / box.width,
+    );
+    // Only ever zoom DOWN to fit, or UP to fill a small subject — but never so
+    // far up that a short element turns into a wall of type.
+    const zoom = Math.max(0.35, Math.min(z, 1.9));
+    await page.evaluate((v) => { document.documentElement.style.zoom = String(v); }, zoom);
+    await page.waitForTimeout(220);
+    await el.scrollIntoViewIfNeeded();
+    box = await el.boundingBox();
+    if (box) {
+      // Centre it vertically in the frame.
+      await page.evaluate(({ y, h, vh }) => window.scrollBy(0, y - (vh - h) / 2),
+        { y: box.y, h: box.height, vh: VH });
+      await page.waitForTimeout(150);
+    }
+  }
+
   const file = path.join(FRAMES, `f${String(frameNo++).padStart(5, "0")}.png`);
-  await el.screenshot({ path: file });
+  await page.screenshot({ path: file });
   timeline.push({ file, frames: Math.round(seconds * FPS) });
+  await page.evaluate(() => { document.documentElement.style.zoom = "1"; });
 }
 
 /**
@@ -156,8 +212,13 @@ async function card(page, html, seconds) {
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 async function main() {
-  rmSync(FRAMES, { recursive: true, force: true });
+  // Only wipe when recording everything; a targeted re-render needs the
+  // other shots' stills to still be there.
+  if (!ONLY) rmSync(FRAMES, { recursive: true, force: true });
   mkdirSync(FRAMES, { recursive: true });
+  // Start numbering past whatever already exists so a re-render cannot
+  // overwrite a still another shot is still pointing at.
+  frameNo = ONLY ? Date.now() % 90000 : 0;
   mkdirSync(PROFILE, { recursive: true });
 
   // THE COMMAND RUNS FOR REAL, and before anything is filmed, so a failing
@@ -180,8 +241,7 @@ async function main() {
   const ctx = await chromium.launchPersistentContext(PROFILE, {
     headless: false,
     viewport: { width: VW, height: VH },
-    // 2x so the upscale to 1080p stays sharp rather than soft.
-    deviceScaleFactor: 2,
+    deviceScaleFactor: 1,
     args: [`--window-size=${VW},${VH}`, "--hide-scrollbars"],
   });
   const page = ctx.pages()[0] ?? await ctx.newPage();
@@ -221,79 +281,97 @@ async function main() {
   const legHash = (facts.legs.join(" ").match(/0x[0-9a-f]{64}/i) ?? [])[0];
 
   // ---- 0:00 title --------------------------------------------------------
-  await card(page, `<div class="title">A twenty two cent trade.</div>`, 3);
+  await shot("title", async () => {
+    await card(page, `<div class="title">A twenty two cent trade.</div>`, 3);
+  });
 
   // ---- 0:03 the executed leg on the explorer -----------------------------
-  if (legHash) {
-    await page.goto(`${EXPLORER}/tx/${legHash}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(9000);
-    await freeze(page);
-    const shown = await page.evaluate((h) => document.body.innerText.includes(h.slice(0, 20)), legHash);
-    need(shown, `explorer did not render tx ${legHash} (shot 0:03)`);
-    await hold(page, 17);
-  } else {
-    await card(page, `<pre>no executed leg to show</pre>`, 17);
-  }
+  await shot("tx", async () => {
+    if (legHash) {
+      await page.goto(`${EXPLORER}/tx/${legHash}`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(9000);
+      await freeze(page);
+      const shown = await page.evaluate((h) => document.body.innerText.includes(h.slice(0, 20)), legHash);
+      need(shown, `explorer did not render tx ${legHash} (shot 0:03)`);
+      await hold(page, 17);
+    } else {
+      await card(page, `<pre>no executed leg to show</pre>`, 17);
+    }
+  });
 
   // ---- 0:20 the cycle log -------------------------------------------------
-  await page.goto(app, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(9000);
-  await freeze(page);
-  await page.evaluate(() => document.querySelector("[data-testid=refusals]")
-    ?.scrollIntoView({ block: "start" }));
-  await motion(page, 20, 40, async (i) => {
-    await page.evaluate((n) => window.scrollBy(0, n === 0 ? 0 : 14), i);
+  await shot("cyclelog", async () => {
+    await page.goto(app, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    await page.evaluate(() => document.querySelector("[data-testid=refusals]")
+      ?.scrollIntoView({ block: "start" }));
+    await motion(page, 20, 40, async (i) => {
+      await page.evaluate((n) => window.scrollBy(0, n === 0 ? 0 : 14), i);
+    });
   });
 
   // ---- 0:40 convergence ---------------------------------------------------
-  await shotOf(page, "[data-testid=convergence]", 25);
+  await shot("convergence", async () => {
+    await shotOf(page, "[data-testid=convergence]", 25);
+  });
 
   // ---- 1:05 the mandate ---------------------------------------------------
-  await shotOf(page, "[data-testid=rules]", 30);
+  await shot("mandate", async () => {
+    await shotOf(page, "[data-testid=rules]", 30);
+  });
 
   // ---- 1:35 proof, then the source page -----------------------------------
-  await shotOf(page, "[data-testid=proof]", 13);
+  await shot("proof", async () => {
+    await shotOf(page, "[data-testid=proof]", 13);
 
-  await page.goto(SOURCE_PAGE, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(6000);
-  await freeze(page);
-  const src = await page.evaluate(() => document.body.innerText);
-  need(/metadata\.json/i.test(src) && /sources/i.test(src),
-       "Sourcify has no verified sources for this address (shot 1:35)");
-  await hold(page, 12);
+    await page.goto(SOURCE_PAGE, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(6000);
+    await freeze(page);
+    const src = await page.evaluate(() => document.body.innerText);
+    need(/metadata\.json/i.test(src) && /sources/i.test(src),
+         "Sourcify has no verified sources for this address (shot 1:35)");
+    await hold(page, 12);
+  });
 
   // ---- 2:00 rules and the cap, then the test running ----------------------
-  await page.goto(app, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(9000);
-  await freeze(page);
-  await shotOf(page, "[data-testid=rules]", 8);
+  await shot("capandtest", async () => {
+    await page.goto(app, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    await shotOf(page, "[data-testid=rules]", 8);
 
-  // 22s over 22 steps: one frame-run per second, so the rounding in motion()
-  // divides evenly instead of losing a third of a second.
-  const lines = testOut.trimEnd().split("\n").slice(-22);
-  await motion(page, 22, Math.min(lines.length, 22), async (i) => {
-    const body = esc(lines.slice(0, i + 1).join("\n"))
-      .replace(/(\[PASS\][^\n]*)/g, '<span class="ok">$1</span>');
-    await page.setContent(`<!doctype html><meta charset="utf-8"><style>
-      html,body{margin:0;height:100%;background:#000;color:#e2e8f0;
-        font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
-      pre{margin:0;padding:56px;font-size:24px;line-height:1.5;white-space:pre-wrap;}
-      .ok{color:#4ade80;}</style><pre>$ forge test --match-test test_Cap_ -vv\n\n${body}</pre>`);
+    // 22s over 22 steps: one frame-run per second, so the rounding in motion()
+    // divides evenly instead of losing a third of a second.
+    const lines = testOut.trimEnd().split("\n").slice(-22);
+    await motion(page, 22, Math.min(lines.length, 22), async (i) => {
+      const body = esc(lines.slice(0, i + 1).join("\n"))
+        .replace(/(\[PASS\][^\n]*)/g, '<span class="ok">$1</span>');
+      await page.setContent(`<!doctype html><meta charset="utf-8"><style>
+        html,body{margin:0;height:100%;background:#000;color:#e2e8f0;
+          font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
+        pre{margin:0;padding:56px;font-size:24px;line-height:1.5;white-space:pre-wrap;}
+        .ok{color:#4ade80;}</style><pre>$ forge test --match-test test_Cap_ -vv\n\n${body}</pre>`);
+    });
   });
 
   // ---- 2:30 legs, refusals, chart -----------------------------------------
-  await page.goto(app, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(9000);
-  await freeze(page);
-  await shotOf(page, "[data-testid=legs]", 8);
-  await shotOf(page, "[data-testid=refusals]", 6);
-  await shotOf(page, "[data-testid=distance-chart]", 6);
+  await shot("evidence", async () => {
+    await page.goto(app, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    await shotOf(page, "[data-testid=legs]", 8);
+    await shotOf(page, "[data-testid=refusals]", 6);
+    await shotOf(page, "[data-testid=distance-chart]", 6);
+  });
 
   // ---- 2:50 the contract, held ---------------------------------------------
-  await page.goto(`${EXPLORER}/address/${CONTRACT}`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(9000);
-  await freeze(page);
-  await hold(page, 10);
+  await shot("contract", async () => {
+    await page.goto(`${EXPLORER}/address/${CONTRACT}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    await hold(page, 10);
+  });
 
   await ctx.close();
 
@@ -325,6 +403,8 @@ async function main() {
   const list = timeline
     .map((t) => `file '${t.file}'\nduration ${(t.frames / FPS).toFixed(4)}`)
     .join("\n") + `\nfile '${timeline[timeline.length - 1].file}'\n`;
+  writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
+
   const listFile = path.join(OUT, "frames.txt");
 
   // NORMALISE FIRST.
@@ -339,10 +419,9 @@ async function main() {
   for (const t of timeline) {
     const norm = t.file.replace(/\.png$/, ".n.png");
     await run("ffmpeg", ["-y", "-v", "error", "-i", t.file, "-vf",
-      // Fit inside a smaller box, then pad out to full frame. Content never
-      // touches the edge, which is what made shots read as cropped.
-      `scale=${W - 2 * MARGIN}:${H - 2 * MARGIN}:force_original_aspect_ratio=decrease,` +
-      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`, norm]);
+      // Every still is already 1920x1080. This only guarantees it, and costs
+      // nothing when the input already matches.
+      `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`, norm]);
     t.file = norm;
   }
 
