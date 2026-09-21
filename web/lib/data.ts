@@ -79,12 +79,20 @@ export function loadConstituents() {
  * implementations of the same decision will eventually disagree, and the one on
  * screen would then be a lie.
  */
-export function loadLatestCycle() {
+function agentPath(mandateId: bigint | number | undefined, file: string) {
+  // Mandate 1 keeps the original paths, because those files are already
+  // committed and already being fetched. Every other mandate reads its own
+  // directory — a shared latest.json would show one owner another's cycle.
+  const id = mandateId === undefined ? 1 : Number(mandateId);
+  return id === 1 ? `agent/${file}` : `agent/${id}/${file}`;
+}
+
+export function loadLatestCycle(mandateId?: bigint | number) {
   // A STABLE path, not a timestamped one: raw file hosting serves files rather
   // than directory listings, so a timestamped name is unreachable from a
   // browser without an index. The agent writes both — the timestamped file is
   // the archive, this is the readable head.
-  return getJSON<AgentCycle>("agent/latest.json");
+  return getJSON<AgentCycle>(agentPath(mandateId, "latest.json"));
 }
 
 export type PriceRow = {
@@ -241,9 +249,12 @@ export type DistanceRow = {
   shareDistanceBps: number | null;
 };
 
-export async function loadDistance(limit = 600): Promise<DistanceRow[]> {
+export async function loadDistance(
+  limit = 600,
+  mandateId?: bigint | number,
+): Promise<DistanceRow[]> {
   try {
-    const r = await fetch(`${DATA_BASE}/agent/distance.csv`, { cache: "no-store" });
+    const r = await fetch(`${DATA_BASE}/${agentPath(mandateId, "distance.csv")}`, { cache: "no-store" });
     if (!r.ok) return [];
     const lines = (await r.text()).trim().split("\n");
     if (lines.length < 2) return [];

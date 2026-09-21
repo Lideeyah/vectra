@@ -19,14 +19,15 @@ import { bps } from "@/lib/format";
  * and cannot be backfilled, so an empty chart is the honest state of a product
  * that has not run long enough yet, not a rendering failure.
  */
-export function Distance({ toleranceBps }: { toleranceBps?: number }) {
+export function Distance({ toleranceBps, mandateId }: { toleranceBps?: number; mandateId?: bigint }) {
   const [rows, setRows] = useState<DistanceRow[] | null>(null);
 
   useEffect(() => {
-    loadDistance().then(setRows);
-    const t = setInterval(() => void loadDistance().then(setRows), 120_000);
+    loadDistance(600, mandateId).then(setRows);
+    const t = setInterval(
+      () => void loadDistance(600, mandateId).then(setRows), 120_000);
     return () => clearInterval(t);
-  }, []);
+  }, [mandateId]);
 
   if (rows === null) return null;
 

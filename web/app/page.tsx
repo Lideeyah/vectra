@@ -105,19 +105,24 @@ export default function Page() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // The agent's own published decision, on a stable path. Never recomputed
-  // here: two implementations of the same decision will eventually disagree,
-  // and the one on screen would then be a lie.
+  // Which mandate's record to read. The agent services every active mandate
+  // and writes each one's cycle separately, so reading a fixed path would show
+  // this owner whichever mandate happened to run last.
+  const mandateId = phase.k === "ready" ? phase.id : undefined;
+
+  // The agent's own published decision. Never recomputed here: two
+  // implementations of the same decision will eventually disagree, and the one
+  // on screen would then be a lie.
   useEffect(() => {
     let live = true;
     const pull = async () => {
-      const c = await loadLatestCycle();
+      const c = await loadLatestCycle(mandateId);
       if (live) setCycle(c);
     };
     void pull();
     const t = setInterval(pull, 60_000);
     return () => { live = false; clearInterval(t); };
-  }, []);
+  }, [mandateId]);
 
   // Re-render on a timer so "time since last cycle" counts rather than freezes.
   const [, tick] = useState(0);
@@ -202,7 +207,8 @@ export default function Page() {
         </>
       )}
 
-      <Distance toleranceBps={phase.k === "ready" ? phase.m.driftBps : undefined} />
+      <Distance toleranceBps={phase.k === "ready" ? phase.m.driftBps : undefined}
+                mandateId={phase.k === "ready" ? phase.id : undefined} />
 
       <Legs />
 

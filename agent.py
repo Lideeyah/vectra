@@ -90,7 +90,7 @@ def allowance(token, owner, spender):
     return read_uint(token, SEL_ALLOWANCE + pad_addr(owner) + pad_addr(spender))
 
 
-def load_mandate():
+def load_mandate(mandate_id=None):
     """From chain when the contract is deployed; from file until then.
 
     The file form exists so the decision engine is exercisable before
@@ -98,7 +98,7 @@ def load_mandate():
     VECTRA_CONTRACT is set, chain state is the only source.
     """
     if CONTRACT:
-        return load_mandate_from_chain()
+        return load_mandate_from_chain(mandate_id)
     if not MANDATE_FILE.exists():
         raise SystemExit(f"No mandate at {MANDATE_FILE}")
     return json.loads(MANDATE_FILE.read_text())
@@ -111,7 +111,7 @@ def load_mandate():
 RATE_BPS_CONFIG = int(os.environ.get("VECTRA_RATE_BPS") or 0)
 
 
-def load_mandate_from_chain():
+def load_mandate_from_chain(mandate_id=None):
     """The mandate as the CONTRACT holds it, not as a file describes it.
 
     Reading limits from a file while the contract enforces its own is how an
@@ -135,24 +135,25 @@ def load_mandate_from_chain():
             raise SystemExit(f"{sig} on {to}: {json.dumps(res['error'])[:200]}")
         return abi_decode(types, bytes.fromhex(res["result"][2:]))
 
-    if not MANDATE_ID:
-        raise SystemExit("VECTRA_MANDATE_ID is required when VECTRA_CONTRACT is set")
+    mandate_id = mandate_id or MANDATE_ID
+    if not mandate_id:
+        raise SystemExit("no mandate id given")
 
     (owner, agent, expiry, paused, revoked, drift_bps, max_leg, total_cap,
      spent, version) = call(
         CONTRACT, "mandate(uint256)",
         ["address", "address", "uint64", "bool", "bool", "uint16",
          "uint256", "uint256", "uint256", "uint64"],
-        MANDATE_ID)
+        mandate_id)
 
     tokens, weights, targets = call(
         CONTRACT, "basket(uint256)", ["address[]", "uint16[]", "uint256[]"],
-        MANDATE_ID)
+        mandate_id)
 
     if revoked:
-        raise SystemExit(f"mandate {MANDATE_ID} is revoked")
+        return None  # revoked: not an error, just nothing to service
     if paused:
-        raise SystemExit(f"mandate {MANDATE_ID} is paused by its owner")
+        return None  # paused by its owner: respected, not an error
 
     rate_bps = RATE_BPS_CONFIG
     if not rate_bps:
@@ -182,7 +183,7 @@ def load_mandate_from_chain():
 
     return {
         "source": "chain",
-        "mandateId": MANDATE_ID,
+        "mandateId": mandate_id,
         "owner": owner,
         "agent": agent,
         "expiry": int(expiry),
@@ -551,6 +552,17 @@ def total_distance(state):
     return round(distance_bps(values, state["totalUsd"], targets), 2)
 
 
+def mandate_dir(mandate_id):
+    """One directory per mandate.
+
+    The agent services every active mandate, not one, so a single latest.json
+    would be whichever mandate happened to run last — and the interface would
+    show one owner the other's cycle. Each mandate's record is its own.
+    """
+    return LOG_DIR / str(mandate_id)
+
+
+# Mandate 1's series, kept at the old path for the files already committed.
 DISTANCE_CSV = LOG_DIR / "distance.csv"
 DISTANCE_HEADER = ("ts_utc,status,distance_bps,total_usd,priced,positions,"
                    "leg_direction,leg_symbol,leg_usd,distance_after,"
@@ -558,7 +570,7 @@ DISTANCE_HEADER = ("ts_utc,status,distance_bps,total_usd,priced,positions,"
 
 
 def append_distance(started, state, leg, dist, execution=None,
-                    share_dist=None):
+                    share_dist=None, csv_path=None):
     """One row per cycle, appended, never rewritten.
 
     The archives are timestamped files and raw file hosting serves no directory
@@ -594,17 +606,18 @@ def append_distance(started, state, leg, dist, execution=None,
         "NA" if share_dist is None else share_dist,
     ]) + "\n"
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    if not DISTANCE_CSV.exists():
-        DISTANCE_CSV.write_text(DISTANCE_HEADER)
+    path = csv_path or DISTANCE_CSV
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(DISTANCE_HEADER)
     else:
-        _migrate_header()
-    with DISTANCE_CSV.open("a") as fh:
+        _migrate_header(path)
+    with path.open("a") as fh:
         fh.write(row)
     return row.strip()
 
 
-def _migrate_header():
+def _migrate_header(path=None):
     """Keep the header and the rows the same width.
 
     A column added to DISTANCE_HEADER does not reach a file that already
@@ -616,22 +629,23 @@ def _migrate_header():
     Existing rows are padded with an EMPTY value rather than a computed one:
     the measure did not exist when they were recorded, and inventing it now
     would be backfilling evidence."""
-    lines = DISTANCE_CSV.read_text().splitlines()
+    path = path or DISTANCE_CSV
+    lines = path.read_text().splitlines()
     if not lines:
-        DISTANCE_CSV.write_text(DISTANCE_HEADER)
+        path.write_text(DISTANCE_HEADER)
         return
     want = DISTANCE_HEADER.strip().split(",")
     have = lines[0].split(",")
     if have == want:
         return
     if have != want[:len(have)]:
-        print(f"    distance.csv header is not a prefix of the current one; "
+        print(f"    {path} header is not a prefix of the current one; "
               f"leaving it alone: {lines[0]}", file=sys.stderr)
         return
     pad = "," * (len(want) - len(have))
     out = [",".join(want)] + [ln + pad for ln in lines[1:] if ln.strip()]
-    DISTANCE_CSV.write_text("\n".join(out) + "\n")
-    print(f"    distance.csv migrated: {len(have)} -> {len(want)} columns, "
+    path.write_text("\n".join(out) + "\n")
+    print(f"    {path} migrated: {len(have)} -> {len(want)} columns, "
           f"{len(out) - 1} existing row(s) padded", file=sys.stderr)
 
 
@@ -651,7 +665,8 @@ def do_execute(m, leg, payload, payload_err):
 
     if not CONTRACT:
         return {"executed": False, "reason": "no contract configured"}
-    if not MANDATE_ID:
+    mandate_id = m.get("mandateId") or MANDATE_ID
+    if not mandate_id:
         return {"executed": False, "reason": "no mandate id configured"}
     if leg is None:
         return {"executed": False, "reason": "no leg selected this cycle"}
@@ -690,7 +705,7 @@ def do_execute(m, leg, payload, payload_err):
           f"{MINOUT_HAIRCUT_BPS}bps under)")
 
     result, err = sender.send_execute(
-        contract=CONTRACT, mandate_id=MANDATE_ID,
+        contract=CONTRACT, mandate_id=mandate_id,
         token_in=leg["tokenInAddress"], token_out=leg["tokenOutAddress"],
         amount_in=amount_in, min_out=min_out,
         router_calldata=payload["data"], sweep=[],
@@ -722,10 +737,49 @@ def do_execute(m, leg, payload, payload_err):
             "amountIn": str(amount_in), "minOut": str(min_out)}
 
 
-def main():
-    m = load_mandate()
+def active_mandate_ids():
+    """Every mandate the contract currently considers active.
+
+    Read from chain rather than configured. A keeper told which mandate to
+    service is a keeper that services exactly one — the owner who creates the
+    second one gets a page that never changes and no explanation, because
+    nothing is wrong anywhere except that nobody is looking at them.
+    """
+    from eth_abi import decode as abi_decode, encode as abi_encode
+    from eth_utils import keccak
+    import xlayer as chain
+
+    def call(sig, types, *args):
+        inner = sig[sig.index("(") + 1:sig.rindex(")")]
+        data = "0x" + (keccak(text=sig)[:4]
+                       + abi_encode([t for t in inner.split(",") if t],
+                                    list(args))).hex()
+        res = chain.eth_call(CONTRACT, data)
+        if "error" in res:
+            raise SystemExit(f"{sig}: {json.dumps(res['error'])[:200]}")
+        return abi_decode(types, bytes.fromhex(res["result"][2:]))
+
+    (next_id,) = call("nextMandateId()", ["uint256"])
+    ids = []
+    for i in range(1, int(next_id)):
+        try:
+            (ok,) = call("isActive(uint256)", ["bool"], i)
+        except SystemExit:
+            continue
+        if ok:
+            ids.append(i)
+    return ids
+
+
+def run_cycle(mandate_id=None):
+    """One cycle for one mandate. Returns 0 on a cycle that ran."""
+    m = load_mandate(mandate_id)
+    if m is None:
+        print(f"mandate {mandate_id}: paused or revoked, nothing to service")
+        return 0
     started = now()
-    print(f"cycle {started:%Y-%m-%d %H:%M:%S}Z   owner {m['owner']}")
+    print(f"cycle {started:%Y-%m-%d %H:%M:%S}Z   mandate "
+          f"{m.get('mandateId', '-')}   owner {m['owner']}")
     print(f"mode: {'EXECUTE' if EXECUTE else 'DRY RUN — nothing will be sent'}\n")
 
     state = build_state(m)
@@ -786,11 +840,17 @@ def main():
     if EXECUTE:
         execution = do_execute(m, leg, payload, payload_err)
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    out = LOG_DIR / f"cycle_{started:%Y%m%dT%H%M%S}Z.json"
+    mid = m.get("mandateId")
+    # Mandate 1 keeps the historical paths so the files already committed and
+    # already fetched by the interface do not move; every other mandate gets
+    # its own directory.
+    outdir = LOG_DIR if mid in (1, None) else mandate_dir(mid)
+    outdir.mkdir(parents=True, exist_ok=True)
+    out = outdir / f"cycle_{started:%Y%m%dT%H%M%S}Z.json"
     payload_json = json.dumps({
         "ts": started.isoformat(timespec="seconds"),
         "mode": "execute" if EXECUTE else "dry-run",
+        "mandateId": mid,
         "owner": m["owner"], "contract": CONTRACT or None,
         "totalUsd": state["totalUsd"], "usdcValueUsd": state["usdcValueUsd"],
         "positions": state["positions"],
@@ -808,18 +868,51 @@ def main():
     # without an index. The interface's next-move panel and refusal log both
     # depend on this, and its `ts` field is what lets the interface tell a
     # stopped agent from a stable position.
-    (LOG_DIR / "latest.json").write_text(payload_json)
+    (outdir / "latest.json").write_text(payload_json)
 
     dist = total_distance(state)
     print("\ndistance " + ("NA (not every position priced)" if dist is None
                             else f"{dist}bps"))
     share_dist = share_distance_bps(state)
     print(f"share-space distance {share_dist}bps (the displayed metric)")
-    print("series += " + append_distance(started, state, leg, dist, execution,
-                                         share_dist))
+    print("series += " + append_distance(
+        started, state, leg, dist, execution, share_dist,
+        csv_path=(DISTANCE_CSV if mid in (1, None)
+                  else outdir / "distance.csv")))
 
-    print(f"\nlogged {out} and {LOG_DIR / 'latest.json'}")
+    print(f"\nlogged {out} and {outdir / 'latest.json'}")
     return 0
+
+
+def main():
+    """Service every active mandate, one cycle each.
+
+    A failure on one mandate must not stop the others: they are different
+    owners, and one bad quote is not a reason to leave everybody else's
+    position unattended.
+    """
+    if not CONTRACT:
+        return run_cycle()          # file-backed dry run, pre-deployment
+
+    ids = active_mandate_ids()
+    if not ids:
+        print("no active mandates on this contract")
+        return 0
+
+    print(f"servicing {len(ids)} active mandate(s): "
+          f"{', '.join(str(i) for i in ids)}\n")
+    failures = 0
+    for i in ids:
+        print(f"{'=' * 60}\nMANDATE {i}")
+        try:
+            run_cycle(i)
+        except SystemExit as e:
+            failures += 1
+            print(f"mandate {i} cycle failed: {e}", file=sys.stderr)
+        except Exception as e:
+            failures += 1
+            print(f"mandate {i} cycle failed: {e!r}", file=sys.stderr)
+    return 1 if failures == len(ids) else 0
 
 
 if __name__ == "__main__":

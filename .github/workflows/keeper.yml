@@ -55,7 +55,10 @@ jobs:
           # redacted out of any error string before it can reach a log.
           VECTRA_AGENT_KEY: ${{ secrets.VECTRA_AGENT_KEY }}
           VECTRA_CONTRACT: "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"
-          VECTRA_MANDATE_ID: "1"
+          # No mandate id. The agent enumerates every active mandate from the
+          # contract and services each in turn — a keeper told which mandate to
+          # service is a keeper that services exactly one, and the next owner
+          # to create one gets a page that never changes and no explanation.
           VECTRA_RATE_BPS: "2000"
           VECTRA_EXECUTE: ${{ inputs.execute || '1' }}
           VECTRA_DRY_SEND: ${{ inputs.dry_send }}
