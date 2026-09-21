@@ -62,6 +62,14 @@ jobs:
       # and made every call revert with empty data. No contract test could catch
       # it, because Solidity initialises structs by name and an ABI is
       # positional — everything on one side of that boundary agreed with itself.
+      # A workflow with a YAML error does not fail — GitHub silently does not
+      # register it. The keeper's Run button was missing for exactly that
+      # reason and nothing reported it.
+      - name: Every workflow parses
+        run: |
+          pip install --quiet pyyaml
+          python3 tools/check_workflows.py
+
       - name: ABI matches the compiled artifact
         working-directory: web
         run: node scripts/gen-abi.mjs --check

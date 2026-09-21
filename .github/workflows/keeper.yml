@@ -93,6 +93,11 @@ jobs:
           ./scripts/commit_data.sh "agent: final cycles $(date -u +%Y-%m-%dT%H:%MZ)" data || true
           echo "ran $n cycle(s)"
 
+      # A block scalar, not an inline one. The message contains ": ", which
+      # YAML reads as a mapping inside an inline value — that single character
+      # made the whole file unparseable, so GitHub never registered the
+      # workflow and showed no Run button at all.
       - name: Commit whatever is left
         if: always()
-        run: ./scripts/commit_data.sh "agent: cycles $(date -u +%Y-%m-%dT%H:%MZ)" data || true
+        run: |
+          ./scripts/commit_data.sh "agent: cycles $(date -u +%Y-%m-%dT%H:%MZ)" data || true
