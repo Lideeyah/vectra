@@ -678,6 +678,21 @@ exactly the cap rather than unlimited, so the standing permission cannot
 outlive the bound it was granted for.
 tx        0xbe07505b8c1511536210cd9a8f9ec8bbe01fc147d3d6d9c67a2a3d0346a558b3
 
+**Targets amended to version 2 before the series became evidence.** Reaching the
+original targets cost $3.784928 against $3.782148 of remaining cap — over by
+$0.002780, 100.1% of headroom. The owner's balance covered it; the cap did not.
+
+A shortfall that small was the finding, not its sign: NVDAx moved +0.11% between
+two recorded cycles, larger than the gap itself, so whether the plan fit
+depended on which way the market drifted that hour. The failure mode was the
+bad part — the final leg would shrink below the size floor and the refusal log
+would report a minimum-size message rather than "the cap cannot reach these
+targets", which is the wrong story told confidently.
+
+Amended while holdings were near zero, to targets using 88% of remaining cap:
+$3.110448 to reach against $3.564182 available, leaving $0.453734 for price
+movement. Recorded on chain with both old and new values and version 1 to 2.
+
 The prediction held. The runtime code at that address hashes to
 0xc20f87eccd8af42fa47608d1c60b4cce916df43dce508670876ab6a8c6479db9, which is
 the recorded deployment hash, and router/spender/usdc read back as the
