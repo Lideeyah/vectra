@@ -27,8 +27,51 @@ type Eth = {
   removeListener?: (e: string, h: (...a: unknown[]) => void) => void;
 };
 
+/**
+ * Wallets discovered by EIP-6963, in announcement order.
+ *
+ * Reading window.ethereum once on mount is not detection, it is a race: the
+ * extension injects when it is ready, which can be after this code runs, and a
+ * page that checked too early concludes "no wallet installed" and never looks
+ * again. With two wallets installed it is worse — whichever won the property
+ * is the only one the page can ever see.
+ *
+ * Announcements are collected from module load, before React mounts, so they
+ * are not missed.
+ */
+const discovered: { name: string; provider: Eth }[] = [];
+
+if (typeof window !== "undefined") {
+  window.addEventListener("eip6963:announceProvider", (e: Event) => {
+    const d = (e as CustomEvent).detail as { info: { name: string }; provider: Eth };
+    if (!d?.provider || discovered.some((w) => w.name === d.info.name)) return;
+    discovered.push({ name: d.info.name, provider: d.provider });
+  });
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+}
+
+/** Ask again, for wallets that were not ready at module load. */
+export function requestProviders(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+}
+
+export function wallets(): { name: string; provider: Eth }[] {
+  return discovered;
+}
+
+/** A chosen wallet, set by the UI when more than one is installed. */
+let chosen: Eth | null = null;
+export function chooseWallet(provider: Eth): void {
+  chosen = provider;
+}
+
 export function injected(): Eth | null {
   if (typeof window === "undefined") return null;
+  if (chosen) return chosen;
+  if (discovered.length) return discovered[0].provider;
+  // A wallet that predates EIP-6963 still claims window.ethereum, and being
+  // unable to name it is better than not offering it.
   return (window as unknown as { ethereum?: Eth }).ethereum ?? null;
 }
 

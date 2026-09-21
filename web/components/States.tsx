@@ -17,26 +17,65 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function NoWallet() {
+export function NoWallet({ onRetry }: { onRetry?: () => void }) {
   return (
     <Shell>
       <h2 style={{ margin: "0 0 10px", fontSize: 18, fontWeight: 600 }}>No wallet detected</h2>
-      <p className="dim" style={{ fontSize: 14, margin: 0 }}>
+      <p className="dim" style={{ fontSize: 14, margin: "0 0 14px" }}>
         Vectra reads everything from chain, so a wallet is needed even to view a
-        mandate you own. Install a browser wallet and reload.
+        mandate you own. If one is installed and this is wrong, it may not have
+        finished loading — look again.
       </p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {onRetry && (
+          <button className="btn btn-primary" data-testid="retry-wallet" onClick={onRetry}>
+            Look again
+          </button>
+        )}
+        <a className="btn" href="https://metamask.io/download/" target="_blank" rel="noreferrer">
+          Install a wallet
+        </a>
+      </div>
     </Shell>
   );
 }
 
-export function LockedWallet({ onConnect }: { onConnect: () => void }) {
+export function LockedWallet({
+  onConnect, choices, onChoose,
+}: {
+  onConnect: () => void;
+  /** Every wallet that announced itself, so one can be picked deliberately. */
+  choices?: { name: string }[];
+  onChoose?: (name: string) => void;
+}) {
+  const many = (choices?.length ?? 0) > 1;
   return (
     <Shell>
-      <h2 style={{ margin: "0 0 10px", fontSize: 18, fontWeight: 600 }}>Wallet is locked</h2>
+      <h2 style={{ margin: "0 0 10px", fontSize: 18, fontWeight: 600 }}>Connect a wallet</h2>
       <p className="dim" style={{ fontSize: 14, margin: "0 0 18px" }}>
-        A wallet is installed but no account is available. Unlock it and connect.
+        {many
+          ? "More than one wallet is installed. Pick the one holding the account you want to use — whichever claimed the page first is not necessarily the one you meant."
+          : "A wallet is installed but no account is available. Unlock it and connect."}
       </p>
-      <button className="btn btn-primary" onClick={onConnect}>Connect</button>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {many
+          ? choices!.map((c) => (
+              <button
+                key={c.name}
+                className="btn btn-primary"
+                data-testid="connect-wallet"
+                data-wallet={c.name}
+                onClick={() => onChoose?.(c.name)}
+              >
+                Connect {c.name}
+              </button>
+            ))
+          : (
+            <button className="btn btn-primary" data-testid="connect-wallet" onClick={onConnect}>
+              Connect{choices?.length === 1 ? ` ${choices[0].name}` : ""}
+            </button>
+          )}
+      </div>
     </Shell>
   );
 }

@@ -15,7 +15,7 @@ import {
   LockedWallet, NoMandate, NotDeployed, NoWallet, RpcError, UnfundedMandate, WrongNetwork,
 } from "@/components/States";
 import { CHAIN, DATA_BASE, RATE_BPS, VECTRA_ADDRESS } from "@/lib/config";
-import { connect, contractDeployed, switchToXLayer, walletState } from "@/lib/chain";
+import { chooseWallet, connect, contractDeployed, requestProviders, switchToXLayer, wallets, walletState } from "@/lib/chain";
 import { readActiveMandateOf, readMandate, readPosition, readSymbols } from "@/lib/mandate";
 import { loadLatestCycle, type AgentCycle } from "@/lib/data";
 import { addr } from "@/lib/format";
@@ -68,7 +68,15 @@ export default function Page() {
       }
     }
 
-    const w = await walletState();
+    // Extensions announce when they are ready, which can be after this runs.
+    // Concluding "no wallet" on the first look is how a page with a wallet
+    // installed tells the user they have none — and then never rechecks.
+    let w = await walletState();
+    for (let i = 0; w.kind === "none" && i < 6; i++) {
+      requestProviders();
+      await new Promise((r) => setTimeout(r, 250));
+      w = await walletState();
+    }
     if (w.kind === "none") return setPhase({ k: "no-wallet" });
     if (w.kind === "locked") return setPhase({ k: "locked" });
     if (w.chainId !== CHAIN.id) return setPhase({ k: "wrong-network", chainId: w.chainId });
@@ -141,8 +149,18 @@ export default function Page() {
       {phase.k === "loading" && (
         <p className="dim mono" style={{ fontSize: 13 }}>reading chain…</p>
       )}
-      {phase.k === "no-wallet" && <NoWallet />}
-      {phase.k === "locked" && <LockedWallet onConnect={doConnect} />}
+      {phase.k === "no-wallet" && <NoWallet onRetry={load} />}
+      {phase.k === "locked" && (
+        <LockedWallet
+          onConnect={doConnect}
+          choices={wallets().map((w) => ({ name: w.name }))}
+          onChoose={(name) => {
+            const w = wallets().find((x) => x.name === name);
+            if (w) chooseWallet(w.provider);
+            void doConnect();
+          }}
+        />
+      )}
       {phase.k === "wrong-network" && <WrongNetwork chainId={phase.chainId} onSwitch={doSwitch} />}
       {phase.k === "not-deployed" && <NotDeployed />}
       {phase.k === "rpc-error" && <RpcError detail={phase.detail} onRetry={load} />}
