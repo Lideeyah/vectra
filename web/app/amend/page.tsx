@@ -1,0 +1,165 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createWalletClient, custom, type Address } from "viem";
+import { VECTRA_ABI } from "@/lib/abi";
+import { CHAIN, VECTRA_ADDRESS } from "@/lib/config";
+import { publicClient, xlayer } from "@/lib/chain";
+
+/**
+ * Bring the targets inside what the cap can actually reach.
+ *
+ * At the prices recorded below, reaching the original targets cost $3.784928
+ * against $3.782148 of remaining cap — over by $0.002780. A shortfall that
+ * small is worse than a large one: it is inside ordinary price movement, so
+ * whether it fits depends on which way the market drifts, and the failure would
+ * appear as the last leg shrinking to nothing while the refusal log reported a
+ * size floor rather than "the cap cannot reach these targets".
+ *
+ * The amended targets are the originals scaled to use 88% of the remaining cap,
+ * leaving room for price movement rather than another hairline.
+ *
+ * Done NOW, while holdings are near zero, so the amendment is a correction to
+ * an unreachable plan rather than a retreat from a position — and it is
+ * recorded in the target history either way, with both the old and new values.
+ */
+const NEW_TARGETS: bigint[] = [
+  5365020579939101n,   // NVDAx
+  3163548824427970n,   // TSLAx
+  3476361388686300n,   // AAPLx
+];
+
+const ROWS = [
+  { sym: "NVDAx", old: 6055876421789847n, next: NEW_TARGETS[0], usd: 0.988378 },
+  { sym: "TSLAx", old: 3570920269471138n, next: NEW_TARGETS[1], usd: 1.169796 },
+  { sym: "AAPLx", old: 3924013832507040n, next: NEW_TARGETS[2], usd: 1.170116 },
+];
+
+type Eth = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
+
+export default function Amend() {
+  const [log, setLog] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [wallets, setWallets] = useState<{ name: string; provider: unknown }[]>([]);
+  const [picked, setPicked] = useState<{ name: string; provider: unknown } | null>(null);
+  const [account, setAccount] = useState<Address | null>(null);
+  const say = (s: string) => setLog((l) => [...l, s]);
+
+  useEffect(() => {
+    const found: { name: string; provider: unknown }[] = [];
+    const onAnnounce = (e: Event) => {
+      const d = (e as CustomEvent).detail as { info: { name: string }; provider: unknown };
+      if (found.some((w) => w.name === d.info.name)) return;
+      found.push({ name: d.info.name, provider: d.provider });
+      setWallets([...found]);
+    };
+    window.addEventListener("eip6963:announceProvider", onAnnounce);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    const r = [150, 500, 1200].map((ms) =>
+      setTimeout(() => window.dispatchEvent(new Event("eip6963:requestProvider")), ms));
+    return () => {
+      window.removeEventListener("eip6963:announceProvider", onAnnounce);
+      r.forEach(clearTimeout);
+    };
+  }, []);
+
+  const connect = async (w: { name: string; provider: unknown }) => {
+    setPicked(w);
+    setLog([`selected ${w.name}`]);
+    const e = w.provider as Eth;
+    const a = (await e.request({ method: "eth_requestAccounts" })) as string[];
+    setAccount(a[0] as Address);
+    say(`account ${a[0]}`);
+    const c = (await e.request({ method: "eth_chainId" })) as string;
+    if (Number(c) !== CHAIN.id) say(`wrong chain ${Number(c)} — switch to ${CHAIN.id}`);
+  };
+
+  const run = async () => {
+    if (!account || !picked) return;
+    setBusy(true);
+    try {
+      const before = (await publicClient.readContract({
+        address: VECTRA_ADDRESS, abi: VECTRA_ABI, functionName: "position", args: [1n],
+      })) as [readonly Address[], readonly bigint[], readonly bigint[]];
+      say(`targets before: ${before[2].map(String).join(", ")}`);
+
+      const wallet = createWalletClient({
+        account, chain: xlayer, transport: custom(picked.provider as never),
+      });
+      const hash = await wallet.writeContract({
+        address: VECTRA_ADDRESS, abi: VECTRA_ABI,
+        functionName: "amendTargets", args: [1n, NEW_TARGETS],
+      });
+      say(`tx ${hash}`);
+      const r = await publicClient.waitForTransactionReceipt({ hash });
+      say(`status ${r.status}, gas ${r.gasUsed}`);
+      if (r.status !== "success") throw new Error("amendTargets reverted");
+
+      // Read back from chain, not from what the call returned.
+      const after = (await publicClient.readContract({
+        address: VECTRA_ADDRESS, abi: VECTRA_ABI, functionName: "position", args: [1n],
+      })) as [readonly Address[], readonly bigint[], readonly bigint[]];
+      say(`targets after:  ${after[2].map(String).join(", ")}`);
+      const m = (await publicClient.readContract({
+        address: VECTRA_ADDRESS, abi: VECTRA_ABI, functionName: "mandate", args: [1n],
+      })) as readonly unknown[];
+      say(`version now ${String(m[9])}`);
+      say("AMENDED — recorded in the target history with both values");
+    } catch (e) {
+      say(`ERROR: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="wrap" style={{ paddingTop: 48, paddingBottom: 80 }}>
+      <h1 style={{ fontSize: 20, fontWeight: 500 }}>Amend targets to fit the cap</h1>
+      <p className="dim" style={{ fontSize: 13, maxWidth: 660 }}>
+        Reaching the current targets costs <span className="mono">$3.784928</span>{" "}
+        against <span className="mono">$3.782148</span> of remaining cap — over by{" "}
+        <span className="mono">$0.002780</span>. These amended targets use 88% of
+        the remaining cap, leaving room for price movement. Signed by the owner.
+      </p>
+
+      <div style={{ marginTop: 18 }}>
+        <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+          WALLET {picked ? `— ${picked.name}` : "— choose the OWNER wallet"}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {wallets.length === 0 && <span className="faint" style={{ fontSize: 12 }}>none announced</span>}
+          {wallets.map((w) => (
+            <button key={w.name} className="btn" onClick={() => void connect(w)}
+              style={picked?.name === w.name ? { borderColor: "var(--cyan)", color: "var(--cyan)" } : undefined}>
+              {w.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ border: "1px solid var(--bone-12)", padding: 18, marginTop: 18 }}>
+        {ROWS.map((r) => (
+          <div key={r.sym} style={{ padding: "8px 0", borderTop: "1px solid var(--bone-12)", fontSize: 13 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <span>{r.sym}</span>
+              <span className="mono" style={{ fontSize: 12 }}>
+                {r.old.toString()} → {r.next.toString()}
+              </span>
+            </div>
+            <div className="faint" style={{ fontSize: 12 }}>costs ${r.usd.toFixed(6)} to reach</div>
+          </div>
+        ))}
+      </div>
+
+      <button className="btn" style={{ marginTop: 18 }} disabled={!account || busy} onClick={run}>
+        {busy ? "amending…" : "Amend targets"}
+      </button>
+
+      {log.length > 0 && (
+        <pre className="mono" style={{ fontSize: 12, marginTop: 20, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          {log.join("\n")}
+        </pre>
+      )}
+    </div>
+  );
+}
