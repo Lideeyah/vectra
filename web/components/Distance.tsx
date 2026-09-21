@@ -35,7 +35,15 @@ export function Distance({ toleranceBps }: { toleranceBps?: number }) {
   // different number from the one displayed above it is how one word ends up
   // meaning two things.
   const measured = rows.filter((r) => r.shareDistanceBps !== null);
-  const unmeasured = rows.length - measured.length;
+  // Two different reasons a row has no value, and they must not read alike.
+  // A cycle that could not price anything was genuinely unmeasurable. A cycle
+  // recorded before this column existed WAS measured — just not in this
+  // metric — and calling it unmeasurable would be a false statement about the
+  // agent's history.
+  const predatesMetric = rows.filter(
+    (r) => r.shareDistanceBps === null && r.status === "priced",
+  ).length;
+  const unmeasured = rows.length - measured.length - predatesMetric;
 
   return (
     <section data-testid="distance-chart" style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--bone-12)" }}>
@@ -57,10 +65,22 @@ export function Distance({ toleranceBps }: { toleranceBps?: number }) {
           ) : (
             <>
               {rows.length} cycle{rows.length === 1 ? "" : "s"} recorded,{" "}
-              {measured.length} of them measurable. A cycle in which any position
-              could not be priced records no distance at all rather than a
-              distance computed from the part that quoted — so there is not yet
-              enough to plot.
+              {measured.length} carrying this measure.{" "}
+              {predatesMetric > 0 && (
+                <>
+                  {predatesMetric} {predatesMetric === 1 ? "was" : "were"}{" "}
+                  recorded before it was introduced and {predatesMetric === 1 ? "is" : "are"}{" "}
+                  left blank rather than computed after the fact.{" "}
+                </>
+              )}
+              {unmeasured > 0 && (
+                <>
+                  {unmeasured} could not price every position, and record no
+                  distance at all rather than one computed from the part that
+                  quoted.{" "}
+                </>
+              )}
+              Not yet enough to plot.
             </>
           )}
         </p>
@@ -72,6 +92,7 @@ export function Distance({ toleranceBps }: { toleranceBps?: number }) {
         <div className="faint" style={{ fontSize: 12, marginTop: 12 }}>
           {rows.length} cycle{rows.length === 1 ? "" : "s"} ·{" "}
           {measured.length} measured
+          {predatesMetric > 0 && <> · {predatesMetric} predate this measure</>}
           {unmeasured > 0 && (
             <> · {unmeasured} unmeasurable, shown as breaks rather than joined up</>
           )}

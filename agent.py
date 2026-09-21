@@ -597,9 +597,42 @@ def append_distance(started, state, leg, dist, execution=None,
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if not DISTANCE_CSV.exists():
         DISTANCE_CSV.write_text(DISTANCE_HEADER)
+    else:
+        _migrate_header()
     with DISTANCE_CSV.open("a") as fh:
         fh.write(row)
     return row.strip()
+
+
+def _migrate_header():
+    """Keep the header and the rows the same width.
+
+    A column added to DISTANCE_HEADER does not reach a file that already
+    exists, because the header is only written on creation. The rows then carry
+    one more field than the header names, which is not an error anywhere — the
+    file still parses, the last column is simply read under the wrong name or
+    dropped. Silent, and the chart quietly plots something else.
+
+    Existing rows are padded with an EMPTY value rather than a computed one:
+    the measure did not exist when they were recorded, and inventing it now
+    would be backfilling evidence."""
+    lines = DISTANCE_CSV.read_text().splitlines()
+    if not lines:
+        DISTANCE_CSV.write_text(DISTANCE_HEADER)
+        return
+    want = DISTANCE_HEADER.strip().split(",")
+    have = lines[0].split(",")
+    if have == want:
+        return
+    if have != want[:len(have)]:
+        print(f"    distance.csv header is not a prefix of the current one; "
+              f"leaving it alone: {lines[0]}", file=sys.stderr)
+        return
+    pad = "," * (len(want) - len(have))
+    out = [",".join(want)] + [ln + pad for ln in lines[1:] if ln.strip()]
+    DISTANCE_CSV.write_text("\n".join(out) + "\n")
+    print(f"    distance.csv migrated: {len(have)} -> {len(want)} columns, "
+          f"{len(out) - 1} existing row(s) padded", file=sys.stderr)
 
 
 MINOUT_HAIRCUT_BPS = int(os.environ.get("VECTRA_MINOUT_HAIRCUT_BPS", "50"))
