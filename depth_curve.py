@@ -24,10 +24,24 @@ import okx_dex
 
 USDC = "0xb6ceceab302e2e4948951ee7843fc24e92933061"
 USDC_DECIMALS = 6
-LADDER = [1.0, 5.0, 10.0, 25.0, 50.0, 100.0]
+# Overridable so a specific question can be asked without editing code —
+# e.g. VECTRA_LADDER="1,2" to find out whether a $1 leg routes at all.
+# `or` not a default argument: a blank workflow input arrives as an empty
+# STRING, not as an unset variable, and "".split(",") is [""], which is a
+# ValueError rather than the default ladder.
+LADDER = [float(x) for x in
+          (os.environ.get("VECTRA_LADDER") or "1,5,10,25,50,100").split(",")
+          if x.strip()]
 THROTTLE_S = 3.0
 THIN_TAIL_COUNT = 3   # worst-measured quotable assets, graded alongside the set
-OUT = Path("data/verifications/depth_curve.json")
+# A non-default ladder writes to its OWN file. The default-ladder result is
+# the evidence SPEC 2A cites for the 0.0008%-to-5.74% range, and a narrower
+# run would otherwise silently overwrite it with two data points. Derived from
+# the ladder rather than passed in, so there is nothing to remember.
+_DEFAULT_LADDER = [1.0, 5.0, 10.0, 25.0, 50.0, 100.0]
+OUT = Path("data/verifications/depth_curve.json") if LADDER == _DEFAULT_LADDER \
+    else Path("data/verifications/depth_curve_"
+              + "-".join(f"{u:g}" for u in LADDER) + ".json")
 
 CONSTITUENTS = Path("data/constituents.json")
 

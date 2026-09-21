@@ -9,6 +9,10 @@ on:
         description: "SYM=address pairs, comma separated. Blank = the whole recording set."
         required: false
         default: ""
+      ladder:
+        description: "USD sizes, comma separated. Blank = 1,5,10,25,50,100. A non-default ladder writes its own file."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -37,6 +41,7 @@ jobs:
           OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
           OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
           VECTRA_TOKENS: ${{ inputs.tokens }}
+          VECTRA_LADDER: ${{ inputs.ladder }}
         run: python depth_curve.py
 
       - name: Commit
