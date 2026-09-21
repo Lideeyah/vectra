@@ -1,0 +1,638 @@
+{
+  "ts": "2026-09-21T09:07:40+00:00",
+  "ladderUsd": [
+    1.0,
+    2.0
+  ],
+  "results": [
+    {
+      "symbol": "NVDAx",
+      "address": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.004460439661317896,
+          "rate": 0.004460439661317896,
+          "unitPriceUsd": 224.1931459520151,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.008920850969685729,
+          "rate": 0.004460425484842864,
+          "unitPriceUsd": 224.19385850030153,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0003% from $1 to $2."
+    },
+    {
+      "symbol": "MSTRx",
+      "address": "0xae2f842ef90c0d5213259ab82639d5bbf649b08e",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.006107478164198255,
+          "rate": 0.006107478164198255,
+          "unitPriceUsd": 163.73370041041687,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.012219215292745767,
+          "rate": 0.006109607646372884,
+          "unitPriceUsd": 163.67663160721526,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "REAL SMALL-SIZE PENALTY: the rate improves with size on a SINGLE unchanged route. Small size carries a genuine cost here, and the proportionality claim needs qualifying to the liquid set with exceptions."
+    },
+    {
+      "symbol": "SPYx",
+      "address": "0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.00130306595594705,
+          "rate": 0.00130306595594705,
+          "unitPriceUsd": 767.4208626479034,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.002606133046662024,
+          "rate": 0.001303066523331012,
+          "unitPriceUsd": 767.4205284958998,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: +0.0000% from $1 to $2."
+    },
+    {
+      "symbol": "QQQx",
+      "address": "0xa753a7395cae905cd615da0b82a53e0560f250af",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.001374091999070235,
+          "rate": 0.001374091999070235,
+          "unitPriceUsd": 727.7533095867232,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.002748183592884433,
+          "rate": 0.0013740917964422165,
+          "unitPriceUsd": 727.7534169035789,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0000% from $1 to $2."
+    },
+    {
+      "symbol": "GOOGLx",
+      "address": "0xe92f673ca36c5e2efd2de7628f815f84807e803f",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.002828706436918026,
+          "rate": 0.002828706436918026,
+          "unitPriceUsd": 353.5184800192751,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.005657410766833517,
+          "rate": 0.0028287053834167583,
+          "unitPriceUsd": 353.51861168097764,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0000% from $1 to $2."
+    },
+    {
+      "symbol": "BRK.Bx",
+      "address": "0x12992613fdd35abe95dec5a4964331b1ee23b50d",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.001965640567083745,
+          "rate": 0.001965640567083745,
+          "unitPriceUsd": 508.7400091073699,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.003931265080662944,
+          "rate": 0.001965632540331472,
+          "unitPriceUsd": 508.74208657095505,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0004% from $1 to $2."
+    },
+    {
+      "symbol": "TSLAx",
+      "address": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.002705243745361901,
+          "rate": 0.002705243745361901,
+          "unitPriceUsd": 369.6524580139903,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.005410485256774451,
+          "rate": 0.0027052426283872256,
+          "unitPriceUsd": 369.65261064075656,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0000% from $1 to $2."
+    },
+    {
+      "symbol": "AAPLx",
+      "address": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.002982455309596932,
+          "rate": 0.002982455309596932,
+          "unitPriceUsd": 335.2942110422256,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.005964911337775648,
+          "rate": 0.002982455668887824,
+          "unitPriceUsd": 335.29417064995505,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: +0.0000% from $1 to $2."
+    },
+    {
+      "symbol": "COINx",
+      "address": "0x364f210f430ec2448fc68a49203040f6124096f0",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.004933849713600915,
+          "rate": 0.004933849713600915,
+          "unitPriceUsd": 202.68148769171998,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.009867657438272783,
+          "rate": 0.004933828719136391,
+          "unitPriceUsd": 202.6823501434882,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0004% from $1 to $2."
+    },
+    {
+      "symbol": "TSMx",
+      "address": "0x9e3bf4ecfc44eedd624f26656b6736a3f093b073",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.002275594579109161,
+          "rate": 0.002275594579109161,
+          "unitPriceUsd": 439.4455889376724,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.00455117944463796,
+          "rate": 0.00227558972231898,
+          "unitPriceUsd": 439.44652684620684,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0002% from $1 to $2."
+    },
+    {
+      "symbol": "AVGOx",
+      "address": "0x38bac69cbbd28156796e4163b2b6dcb81e336565",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.002757053094387076,
+          "rate": 0.002757053094387076,
+          "unitPriceUsd": 362.70610893777916,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.005514102411054163,
+          "rate": 0.0027570512055270814,
+          "unitPriceUsd": 362.70635742828875,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0001% from $1 to $2."
+    },
+    {
+      "symbol": "IWMx",
+      "address": "0xdadfb355c6110eda0908740d52c834d6c2bcddc7",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.003504397374839918,
+          "rate": 0.003504397374839918,
+          "unitPriceUsd": 285.35576678021005,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.007008790122677664,
+          "rate": 0.003504395061338832,
+          "unitPriceUsd": 285.35595516390106,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0001% from $1 to $2."
+    },
+    {
+      "symbol": "HOODx",
+      "address": "0xe1385fdd5ffb10081cd52c56584f25efa9084015",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.008046157245696954,
+          "rate": 0.008046157245696954,
+          "unitPriceUsd": 124.2829302813831,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.01609230255056551,
+          "rate": 0.008046151275282755,
+          "unitPriceUsd": 124.28302250194251,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0001% from $1 to $2."
+    },
+    {
+      "symbol": "ASMLx",
+      "address": "0xc0b417e7f83db438631eb5e096684dd742e5294f",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.000582979695198972,
+          "rate": 0.000582979695198972,
+          "unitPriceUsd": 1715.3256077961655,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.001165958521562631,
+          "rate": 0.0005829792607813154,
+          "unitPriceUsd": 1715.3268860024086,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0001% from $1 to $2."
+    },
+    {
+      "symbol": "NKEx",
+      "address": "0x7c5e9e93ea0f8fe94ea94eb6283f200ba0b72be0",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.02973342298266552,
+          "rate": 0.02973342298266552,
+          "unitPriceUsd": 33.63218559070701,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.05940723977073919,
+          "rate": 0.029703619885369594,
+          "unitPriceUsd": 33.66593041047318,
+          "routes": [
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.1002% from $1 to $2."
+    },
+    {
+      "symbol": "IRENx",
+      "address": "0xfbfc1fd14eec970276c8a3bf5e6131cd751cc0b9",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.020823919718389174,
+          "rate": 0.020823919718389174,
+          "unitPriceUsd": 48.02169877349847,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.041629804539509596,
+          "rate": 0.020814902269754798,
+          "unitPriceUsd": 48.04250277230728,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.0433% from $1 to $2."
+    },
+    {
+      "symbol": "RKLBx",
+      "address": "0xe17ce7dd2afb6da3488fd9ef2558523d569e17b4",
+      "rows": [
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.015379654853660654,
+          "rate": 0.015379654853660654,
+          "unitPriceUsd": 65.02096500312429,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.030702066206719173,
+          "rate": 0.015351033103359587,
+          "unitPriceUsd": 65.14219552957313,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "NORMAL: the rate does not meaningfully improve with size (best is +0.0000% vs the smallest, within noise). Cost degrades monotonically as expected: -0.1861% from $1 to $2."
+    }
+  ],
+  "comparison": [
+    {
+      "symbol": "NVDAx",
+      "originalDepthPct": 0.000935552356359059,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "MSTRx",
+      "originalDepthPct": -0.03615755853182721,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "SPYx",
+      "originalDepthPct": 0.00022169832053294878,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "QQQx",
+      "originalDepthPct": 0.0005356162031326354,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "GOOGLx",
+      "originalDepthPct": 0.0016239211589325578,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "BRK.Bx",
+      "originalDepthPct": 0.0017077403557007715,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "TSLAx",
+      "originalDepthPct": 0.0020579333058730683,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "AAPLx",
+      "originalDepthPct": 0.002107968879092169,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "COINx",
+      "originalDepthPct": 0.0027455129425744177,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "TSMx",
+      "originalDepthPct": 0.0030164314881378725,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "AVGOx",
+      "originalDepthPct": 0.0032882801410878707,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "IWMx",
+      "originalDepthPct": 0.0034254457710683915,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "HOODx",
+      "originalDepthPct": 0.003600996407617964,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "ASMLx",
+      "originalDepthPct": 0.0036796481954800924,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "NKEx",
+      "originalDepthPct": 2.915894765355844,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "IRENx",
+      "originalDepthPct": 2.140628620746206,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    },
+    {
+      "symbol": "RKLBx",
+      "originalDepthPct": 1.9271449180687343,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    }
+  ]
+}
