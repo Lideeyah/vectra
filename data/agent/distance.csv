@@ -1,0 +1,3 @@
+ts_utc,status,distance_bps,total_usd,priced,positions,leg_direction,leg_symbol,leg_usd,distance_after,executed,tx_hash,binding_constraint
+2026-09-21T10:39:34Z,priced,10000.0,4.09,3,3,buy,NVDAx,0.22,9466.8,false,,rate bound (maxLegBpsOfTarget)
+2026-09-21T10:44:50Z,priced,10000.0,4.09,3,3,buy,NVDAx,0.22,9467.01,false,,rate bound (maxLegBpsOfTarget)
