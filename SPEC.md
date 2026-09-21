@@ -669,7 +669,19 @@ tx        0xbe07505b8c1511536210cd9a8f9ec8bbe01fc147d3d6d9c67a2a3d0346a558b3
 The prediction held. The runtime code at that address hashes to
 0xc20f87eccd8af42fa47608d1c60b4cce916df43dce508670876ab6a8c6479db9, which is
 the recorded deployment hash, and router/spender/usdc read back as the
-constructor arguments. Deployed from the browser wallet rather than forge,
+constructor arguments. VERIFIED on Sourcify: exact_match on BOTH creation and runtime bytecode
+(chain 196), which means the published sources compile to bytes identical to
+what is on chain, metadata included — not a partial match.
+
+    https://repo.sourcify.dev/196/0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0
+
+OKLink's source tab is NOT yet populated. Its verification API requires an
+Ok-Access-Key, and the existing OKX credential is read but not entitled for
+that product — the API returns 401 with no key and 403 with this one. That is
+an entitlement to obtain, not a property of the contract, and the Sourcify
+result already proves the source matches independently of any explorer.
+
+Deployed from the browser wallet rather than forge,
 because the original MPC wallet refuses contract creation; the bytes came from
 the same compiled artifact, which is why the hash matches.
 ```
