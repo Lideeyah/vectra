@@ -12,7 +12,7 @@ on:
       address:
         description: "Predicted contract address the payload is built for"
         required: false
-        default: "0xd24424Cc482D68b19e82aa7A6411C48aeD22215B"
+        default: "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"
       fork_block:
         description: "Block to pin the fork to (blank = latest)"
         required: false

@@ -644,6 +644,16 @@ NVDAx delivered to the mandate owner   22528622203782763   (0.0225 NVDAx for $5)
 exit 0 (PASS)
 ```
 
+The address above is the one predicted at the time of that run, and it is left
+as it was recorded rather than rewritten to the address finally deployed
+(`0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0`). Editing a recorded result to
+match a later state would make the record a description of the present instead
+of evidence of what happened. The finding is unaffected: it is about whether a
+payload built for an address works when a contract AT that address forwards it,
+which is a property of the binding and not of any particular address. The
+workflow's default input now points at the live contract, so a re-run tests the
+deployed one.
+
 Fetched and forwarded in one job seconds apart, against a fork of live X Layer at the current block, with the fork clock aligned to the payload's issue time. The contract's shape is therefore correct against the real router: the pull from the owner, the approval to the separate `spender`, the forward of verbatim calldata, the `minOut` check against real holdings, and the delivery to the owner all work end to end on real state.
 
 The `userWalletAddress` requirement is now a verified constraint rather than an inference from a parameter name: **the agent must request every payload with `userWalletAddress` set to the contract address.**
