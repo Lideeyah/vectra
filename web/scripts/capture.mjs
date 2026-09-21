@@ -46,6 +46,15 @@ const SOURCE_PAGE =
   `https://repo.sourcify.dev/contracts/full_match/196/${"0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"}/`;
 const FPS = 30;
 const W = 1920, H = 1080;
+/**
+ * The BROWSER is narrower than the frame on purpose.
+ *
+ * The app's content column is 1120px wide. Captured at 1920 it sits in a sea
+ * of empty background and every value is small. Captured at 1280 it fills the
+ * width, and ffmpeg scales the result up to 1080p — so the text gets bigger
+ * without anything being cropped.
+ */
+const VW = 1280, VH = 860;
 
 const problems = [];
 function need(ok, what) { if (!ok) problems.push(what); return ok; }
@@ -79,42 +88,43 @@ async function motion(page, seconds, steps, fn) {
  * still sequence.
  */
 async function freeze(page) {
+  // Consent banners are hidden, never accepted. Clicking Accept would make a
+  // privacy choice on the owner's behalf; hiding it only keeps browser chrome
+  // out of a shot that is supposed to be one idea.
+  await page.addStyleTag({ content: `
+    [class*="cookie" i], [class*="consent" i], [id*="cookie" i], [id*="consent" i],
+    [class*="privacy" i][class*="banner" i] { display: none !important; }
+  `}).catch(() => {});
   await page.addStyleTag({ content: `
     *, *::before, *::after { animation: none !important; transition: none !important; }
     ::-webkit-scrollbar { display: none; }
   `});
 }
 
-/** Fill the frame: scale a region up until it is readable at 1080p. */
-async function zoomTo(page, selector, factor) {
-  await page.evaluate(([sel, f]) => {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    document.body.style.overflow = "hidden";
-    const wrap = document.createElement("div");
-    wrap.id = "__shot";
-    wrap.style.cssText = `position:fixed;inset:0;z-index:99999;background:var(--ground,#0e1620);
-      display:flex;align-items:center;justify-content:center;padding:48px;box-sizing:border-box;`;
-    const clone = el.cloneNode(true);
-    clone.style.transform = `scale(${f})`;
-    clone.style.transformOrigin = "center";
-    clone.style.width = "100%";
-    wrap.appendChild(clone);
-    document.body.appendChild(wrap);
-  }, [selector, factor]);
-}
-async function unzoom(page) {
-  await page.evaluate(() => {
-    document.getElementById("__shot")?.remove();
-    document.body.style.overflow = "";
-  });
+/**
+ * Shoot one element, filling the frame.
+ *
+ * NOT a CSS transform on a clone — that was the first attempt and it clipped:
+ * a scaled element overflows its container on both sides, so the hero number
+ * lost its leading digits and the token names disappeared off the edge. An
+ * element screenshot cannot clip, because the element defines the bounds.
+ * ffmpeg then scales it to 1080p and pads whatever is left.
+ */
+async function shotOf(page, selector, seconds) {
+  const el = page.locator(selector).first();
+  await el.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(250);
+  const file = path.join(FRAMES, `f${String(frameNo++).padStart(5, "0")}.png`);
+  await el.screenshot({ path: file });
+  timeline.push({ file, frames: Math.round(seconds * FPS) });
+  need(true, "");
 }
 
 /** A full-frame card of plain text, for the title and for terminal output. */
 async function card(page, html, seconds) {
   await page.setContent(`<!doctype html><meta charset="utf-8">
   <style>
-    html,body{margin:0;height:100%;background:#000;color:#fff;
+    html,body{margin:0;min-height:100vh;background:#000;color:#fff;
       font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
     .mid{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;}
     .title{font-size:64px;letter-spacing:-0.01em;}
@@ -136,8 +146,11 @@ async function main() {
   console.log("running the blast-radius test for real…");
   let testOut = "";
   try {
-    const r = await run("forge", ["test", "--match-test",
-      "test_Cap_SellDoesNotRefundHeadroom", "-vv"], { cwd: ROOT, maxBuffer: 1 << 24 });
+    // The whole cap group: one test proves a reverting leg is not charged,
+    // the other that a sell does not refund headroom. Together they are "the
+    // loss stops at the cap"; either alone is half of it.
+    const r = await run("forge", ["test", "--match-test", "test_Cap_", "-vv"],
+      { cwd: ROOT, maxBuffer: 1 << 24 });
     testOut = r.stdout;
   } catch (e) {
     testOut = `${e.stdout ?? ""}${e.stderr ?? ""}`;
@@ -147,9 +160,10 @@ async function main() {
 
   const ctx = await chromium.launchPersistentContext(PROFILE, {
     headless: false,
-    viewport: { width: W, height: H },
-    deviceScaleFactor: 1,
-    args: [`--window-size=${W},${H}`, "--hide-scrollbars", "--force-device-scale-factor=1"],
+    viewport: { width: VW, height: VH },
+    // 2x so the upscale to 1080p stays sharp rather than soft.
+    deviceScaleFactor: 2,
+    args: [`--window-size=${VW},${VH}`, "--hide-scrollbars"],
   });
   const page = ctx.pages()[0] ?? await ctx.newPage();
   page.setDefaultTimeout(45000);
@@ -197,9 +211,7 @@ async function main() {
     await freeze(page);
     const shown = await page.evaluate((h) => document.body.innerText.includes(h.slice(0, 20)), legHash);
     need(shown, `explorer did not render tx ${legHash} (shot 0:03)`);
-    await page.evaluate(() => { document.body.style.zoom = "1.5"; });
     await hold(page, 17);
-    await page.evaluate(() => { document.body.style.zoom = "1"; });
   } else {
     await card(page, `<pre>no executed leg to show</pre>`, 17);
   }
@@ -215,19 +227,13 @@ async function main() {
   });
 
   // ---- 0:40 convergence ---------------------------------------------------
-  await zoomTo(page, "[data-testid=convergence]", 1.25);
-  await hold(page, 25);
-  await unzoom(page);
+  await shotOf(page, "[data-testid=convergence]", 25);
 
   // ---- 1:05 the mandate ---------------------------------------------------
-  await zoomTo(page, "[data-testid=rules]", 1.1);
-  await hold(page, 30);
-  await unzoom(page);
+  await shotOf(page, "[data-testid=rules]", 30);
 
   // ---- 1:35 proof, then the source page -----------------------------------
-  await zoomTo(page, "[data-testid=proof]", 1.15);
-  await hold(page, 13);
-  await unzoom(page);
+  await shotOf(page, "[data-testid=proof]", 13);
 
   await page.goto(SOURCE_PAGE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(6000);
@@ -235,17 +241,13 @@ async function main() {
   const src = await page.evaluate(() => document.body.innerText);
   need(/metadata\.json/i.test(src) && /sources/i.test(src),
        "Sourcify has no verified sources for this address (shot 1:35)");
-  await page.evaluate(() => { document.body.style.zoom = "1.6"; });
   await hold(page, 12);
-  await page.evaluate(() => { document.body.style.zoom = "1"; });
 
   // ---- 2:00 rules and the cap, then the test running ----------------------
   await page.goto(app, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(9000);
   await freeze(page);
-  await zoomTo(page, "[data-testid=cap-bar]", 2.2);
-  await hold(page, 8);
-  await unzoom(page);
+  await shotOf(page, "[data-testid=rules]", 8);
 
   // 22s over 22 steps: one frame-run per second, so the rounding in motion()
   // divides evenly instead of losing a third of a second.
@@ -257,22 +259,16 @@ async function main() {
       html,body{margin:0;height:100%;background:#000;color:#e2e8f0;
         font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
       pre{margin:0;padding:56px;font-size:24px;line-height:1.5;white-space:pre-wrap;}
-      .ok{color:#4ade80;}</style><pre>$ forge test --match-test test_Cap_SellDoesNotRefundHeadroom -vv\n\n${body}</pre>`);
+      .ok{color:#4ade80;}</style><pre>$ forge test --match-test test_Cap_ -vv\n\n${body}</pre>`);
   });
 
   // ---- 2:30 legs, refusals, chart -----------------------------------------
   await page.goto(app, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(9000);
   await freeze(page);
-  await zoomTo(page, "[data-testid=legs]", 1.1);
-  await hold(page, 8);
-  await unzoom(page);
-  await zoomTo(page, "[data-testid=refusals]", 1.1);
-  await hold(page, 6);
-  await unzoom(page);
-  await zoomTo(page, "[data-testid=distance-chart]", 1.15);
-  await hold(page, 6);
-  await unzoom(page);
+  await shotOf(page, "[data-testid=legs]", 8);
+  await shotOf(page, "[data-testid=refusals]", 6);
+  await shotOf(page, "[data-testid=distance-chart]", 6);
 
   // ---- 2:50 the contract, held ---------------------------------------------
   await page.goto(`${EXPLORER}/address/${CONTRACT}`, { waitUntil: "domcontentloaded" });
@@ -311,10 +307,30 @@ async function main() {
     .map((t) => `file '${t.file}'\nduration ${(t.frames / FPS).toFixed(4)}`)
     .join("\n") + `\nfile '${timeline[timeline.length - 1].file}'\n`;
   const listFile = path.join(OUT, "frames.txt");
-  writeFileSync(listFile, list);
+
+  // NORMALISE FIRST.
+  //
+  // The concat demuxer needs every input to be the same size. These stills are
+  // not: a full-page capture is 2560x1720 and an element capture is whatever
+  // the element measures. Feeding both in scrambled which still appeared when
+  // — the video showed the rules block during the convergence shot. Each frame
+  // is scaled to fit 1920x1080 and padded, so nothing is cropped and every
+  // input is identical in size before it is concatenated.
+  console.log(`normalising ${timeline.length} stills to ${W}x${H}…`);
+  for (const t of timeline) {
+    const norm = t.file.replace(/\.png$/, ".n.png");
+    await run("ffmpeg", ["-y", "-v", "error", "-i", t.file, "-vf",
+      `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`, norm]);
+    t.file = norm;
+  }
+
+  writeFileSync(listFile, timeline
+    .map((t) => `file '${t.file}'\nduration ${(t.frames / FPS).toFixed(4)}`)
+    .join("\n") + `\nfile '${timeline[timeline.length - 1].file}'\n`);
 
   await run("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listFile,
-    "-vf", `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=black,fps=${FPS}`,
+    "-vf", `fps=${FPS}`,
     "-fps_mode", "cfr", "-r", String(FPS), "-t", intended.toFixed(3),
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "18",
     "-an", MP4], { maxBuffer: 1 << 26 });
