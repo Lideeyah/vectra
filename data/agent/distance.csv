@@ -23,3 +23,6 @@ ts_utc,status,distance_bps,total_usd,priced,positions,leg_direction,leg_symbol,l
 2026-09-21T15:10:00Z,priced,8931.25,4.09,3,3,buy,NVDAx,0.19,8457.82,false,,rate bound (maxLegBpsOfTarget),26387.99
 2026-09-21T15:15:01Z,priced,8930.58,4.09,3,3,buy,NVDAx,0.19,8456.86,false,,rate bound (maxLegBpsOfTarget),26387.99
 2026-09-21T15:20:12Z,priced,8930.99,4.09,3,3,buy,NVDAx,0.19,8457.45,false,,rate bound (maxLegBpsOfTarget),26387.99
+2026-09-21T18:09:59Z,priced,7493.22,4.1,3,3,buy,NVDAx,0.20,7016.39,false,,rate bound (maxLegBpsOfTarget),21588.38
+2026-09-21T18:15:09Z,priced,7492.02,4.1,3,3,buy,NVDAx,0.20,7014.97,false,,rate bound (maxLegBpsOfTarget),21588.38
+2026-09-21T18:20:18Z,priced,7492.74,4.1,3,3,buy,NVDAx,0.20,7015.82,false,,rate bound (maxLegBpsOfTarget),21588.38
