@@ -1,0 +1,75 @@
+{
+  "ts": "2026-09-21T15:19:54+00:00",
+  "ladderUsd": [
+    0.2,
+    0.5,
+    1.0,
+    2.0
+  ],
+  "results": [
+    {
+      "symbol": "NVDAx",
+      "address": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "rows": [
+        {
+          "usd": 0.2,
+          "ok": true,
+          "tokensOut": 0.000888250314152423,
+          "rate": 0.004441251570762115,
+          "unitPriceUsd": 225.1617554347188,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 0.5,
+          "ok": true,
+          "tokensOut": 0.002238095863463025,
+          "rate": 0.00447619172692605,
+          "unitPriceUsd": 223.4041928956277,
+          "routes": [
+            "Uniswap V4 100%",
+            "DYOR swap 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 1.0,
+          "ok": true,
+          "tokensOut": 0.004441237561904077,
+          "rate": 0.004441237561904077,
+          "unitPriceUsd": 225.16246565546774,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        },
+        {
+          "usd": 2.0,
+          "ok": true,
+          "tokensOut": 0.008882468987710135,
+          "rate": 0.004441234493855068,
+          "unitPriceUsd": 225.16262119994093,
+          "routes": [
+            "Uniswap V4 100%",
+            "Uniswap V3 100%",
+            "xStocks wrap V2 100%"
+          ]
+        }
+      ],
+      "verdict": "ROUTING ARTIFACT: the rate improves with size AND the route changes, so the aggregator finds a different path at larger size. Harmless once named."
+    }
+  ],
+  "comparison": [
+    {
+      "symbol": "NVDAx",
+      "originalDepthPct": 0.000935552356359059,
+      "ladder50Pct": null,
+      "ladder100Pct": null,
+      "verdict": "no comparison"
+    }
+  ]
+}
