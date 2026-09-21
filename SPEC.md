@@ -653,6 +653,15 @@ The `userWalletAddress` requirement is now a verified constraint rather than an 
 ```
 deployer  0x083dCd15548a5a6504F774C7f16D28A454BfD656   (nonce 0)
 predicted 0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0
+DEPLOYED  0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0   2026-09-21
+tx        0xbe07505b8c1511536210cd9a8f9ec8bbe01fc147d3d6d9c67a2a3d0346a558b3
+
+The prediction held. The runtime code at that address hashes to
+0xc20f87eccd8af42fa47608d1c60b4cce916df43dce508670876ab6a8c6479db9, which is
+the recorded deployment hash, and router/spender/usdc read back as the
+constructor arguments. Deployed from the browser wallet rather than forge,
+because the original MPC wallet refuses contract creation; the bytes came from
+the same compiled artifact, which is why the hash matches.
 ```
 
 **The prediction holds only while the deployer stays at nonce 0.** A CREATE address is a function of the deployer and its nonce, so any outbound transaction from that key before the deploy silently moves the address, and the payload would then be built for somewhere nothing lives.
