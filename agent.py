@@ -659,6 +659,8 @@ def _migrate_header(path=None):
 
 
 MINOUT_HAIRCUT_BPS = int(os.environ.get("VECTRA_MINOUT_HAIRCUT_BPS", "50"))
+# How many times to requote when the router rejects its own minimum.
+EXECUTE_ATTEMPTS = int(os.environ.get("VECTRA_EXECUTE_ATTEMPTS", "4"))
 
 
 def do_execute(m, leg, payload, payload_err):
@@ -712,18 +714,52 @@ def do_execute(m, leg, payload, payload_err):
     print(f"\nSENDING: {leg['direction']} {leg['symbol']} "
           f"amountIn={amount_in} minOut={min_out} (quote {quoted}, "
           f"{MINOUT_HAIRCUT_BPS}bps under)")
+    print(f"  route: {' | '.join(payload.get('routes') or [])}")
 
-    result, err = sender.send_execute(
-        contract=CONTRACT, mandate_id=mandate_id,
-        token_in=leg["tokenInAddress"], token_out=leg["tokenOutAddress"],
-        amount_in=amount_in, min_out=min_out,
-        router_calldata=payload["data"], sweep=[],
-        dry_run=DRY_SEND,
-    )
+    # Retry with a FRESH quote when the router rejects its own minimum.
+    #
+    # Measured 2026-09-21: every failing leg routed through 'DYOR swap' and
+    # every succeeding one through Uniswap V3, at sizes that all quote fine on
+    # their own ($0.20 quotes at the same unit price as $2.00). The aggregator
+    # sometimes returns a route whose quoted minReceive that route cannot
+    # actually deliver, and the route differs between quotes — so asking again
+    # is the fix, not a bigger slippage number, which was tried and did nothing.
+    attempts = []
+    result = err = None
+    for attempt in range(1, EXECUTE_ATTEMPTS + 1):
+        result, err = sender.send_execute(
+            contract=CONTRACT, mandate_id=mandate_id,
+            token_in=leg["tokenInAddress"], token_out=leg["tokenOutAddress"],
+            amount_in=amount_in, min_out=min_out,
+            router_calldata=payload["data"], sweep=[],
+            dry_run=DRY_SEND,
+        )
+        attempts.append({"attempt": attempt,
+                         "routes": payload.get("routes"),
+                         "minOut": str(min_out),
+                         "error": err})
+        if not err or "Min return not reached" not in err:
+            break
+        if attempt == EXECUTE_ATTEMPTS:
+            break
+        print(f"  attempt {attempt} rejected by the router; requoting",
+              file=sys.stderr)
+        payload, payload_err = build_payload(leg)
+        if not payload:
+            err = f"requote failed: {payload_err}"
+            break
+        quoted = int(payload.get("minReceiveAmount") or 0)
+        if quoted <= 0:
+            err = "requote carried no minReceiveAmount"
+            break
+        min_out = quoted * (10_000 - MINOUT_HAIRCUT_BPS) // 10_000
+        print(f"  requoted route: {' | '.join(payload.get('routes') or [])}")
+
     if err:
-        print(f"  NOT SENT: {err}", file=sys.stderr)
+        print(f"  NOT SENT after {len(attempts)} attempt(s): {err}",
+              file=sys.stderr)
         return {"executed": False, "reason": err, "amountIn": str(amount_in),
-                "minOut": str(min_out)}
+                "minOut": str(min_out), "attempts": attempts}
     if DRY_SEND:
         print(f"  DRY SEND ok, would use gas {result.get('gas')}")
         return {"executed": False, "reason": "dry send; not broadcast",
@@ -743,7 +779,8 @@ def do_execute(m, leg, payload, payload_err):
 
     print(f"  MINED ok, block {rcpt['blockNumber']}, gas {rcpt['gasUsed']}")
     return {"executed": True, "txHash": tx, "receipt": rcpt,
-            "amountIn": str(amount_in), "minOut": str(min_out)}
+            "amountIn": str(amount_in), "minOut": str(min_out),
+            "routes": payload.get("routes"), "attempts": attempts}
 
 
 def active_mandate_ids():
