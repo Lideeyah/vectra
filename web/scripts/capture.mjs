@@ -55,6 +55,8 @@ const W = 1920, H = 1080;
  * without anything being cropped.
  */
 const VW = 1280, VH = 860;
+/** Breathing room on every side of every shot. */
+const MARGIN = 64;
 
 const problems = [];
 function need(ok, what) { if (!ok) problems.push(what); return ok; }
@@ -114,23 +116,40 @@ async function shotOf(page, selector, seconds) {
   const el = page.locator(selector).first();
   await el.scrollIntoViewIfNeeded();
   await page.waitForTimeout(250);
+  // The whole element, even when it is taller than the viewport — a clip
+  // region would be capped at the viewport and cut the bottom off the rules
+  // block. Breathing room is added when the frame is normalised.
   const file = path.join(FRAMES, `f${String(frameNo++).padStart(5, "0")}.png`);
   await el.screenshot({ path: file });
   timeline.push({ file, frames: Math.round(seconds * FPS) });
-  need(true, "");
 }
 
-/** A full-frame card of plain text, for the title and for terminal output. */
+/**
+ * A full-frame card of plain text, for the title and the terminal.
+ *
+ * The body is the flex container and it is exactly one viewport tall. An
+ * earlier version centred a child with height:100% inside a min-height body —
+ * a percentage height against an auto-height parent resolves to nothing, so
+ * the title sat at the top of the frame instead of its middle.
+ */
 async function card(page, html, seconds) {
   await page.setContent(`<!doctype html><meta charset="utf-8">
   <style>
-    html,body{margin:0;min-height:100vh;background:#000;color:#fff;
-      font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
-    .mid{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;}
-    .title{font-size:64px;letter-spacing:-0.01em;}
-    pre{margin:0;padding:48px;font-size:22px;line-height:1.45;white-space:pre-wrap;}
-    .ok{color:#4ade80;} .dim{color:#94a3b8;}
+    html { height: 100%; }
+    body {
+      margin: 0; height: 100vh; background: #000; color: #fff;
+      font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+      display: flex; align-items: center; justify-content: center;
+      box-sizing: border-box; padding: 72px;
+    }
+    .title { font-size: 64px; letter-spacing: -0.01em; text-align: center; }
+    pre {
+      margin: 0; font-size: 22px; line-height: 1.5; white-space: pre-wrap;
+      width: 100%; align-self: center;
+    }
+    .ok { color: #4ade80; } .dim { color: #94a3b8; }
   </style>${html}`);
+  await page.waitForTimeout(120);
   await hold(page, seconds);
 }
 
@@ -202,7 +221,7 @@ async function main() {
   const legHash = (facts.legs.join(" ").match(/0x[0-9a-f]{64}/i) ?? [])[0];
 
   // ---- 0:00 title --------------------------------------------------------
-  await card(page, `<div class="mid"><div class="title">A twenty two cent trade.</div></div>`, 3);
+  await card(page, `<div class="title">A twenty two cent trade.</div>`, 3);
 
   // ---- 0:03 the executed leg on the explorer -----------------------------
   if (legHash) {
@@ -320,7 +339,9 @@ async function main() {
   for (const t of timeline) {
     const norm = t.file.replace(/\.png$/, ".n.png");
     await run("ffmpeg", ["-y", "-v", "error", "-i", t.file, "-vf",
-      `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+      // Fit inside a smaller box, then pad out to full frame. Content never
+      // touches the edge, which is what made shots read as cropped.
+      `scale=${W - 2 * MARGIN}:${H - 2 * MARGIN}:force_original_aspect_ratio=decrease,` +
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`, norm]);
     t.file = norm;
   }
