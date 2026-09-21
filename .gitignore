@@ -12,3 +12,9 @@ broadcast/
 node_modules/
 .next/
 out-cancun/
+
+# Demo capture: frames and the browser profile are build artefacts, and the
+# profile holds cookies from the sites it visits.
+data/demo/frames/
+data/demo/frames.txt
+tools/capture/.profile/
