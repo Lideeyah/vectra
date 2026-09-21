@@ -664,6 +664,18 @@ The `userWalletAddress` requirement is now a verified constraint rather than an 
 deployer  0x083dCd15548a5a6504F774C7f16D28A454BfD656   (nonce 0)
 predicted 0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0
 DEPLOYED  0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0   2026-09-21
+MANDATE 1 LIVE 2026-09-21
+  owner  0x2F45E637920Cc7C7BE15130ab49224C989572AD8
+  agent  0x083dCd15548a5a6504F774C7f16D28A454BfD656
+  cap $4.00 (the loss bound), leg $1.00, drift 5%, rate 20%, expiry 14d
+  basket NVDAx 34% / TSLAx 33% / AAPLx 33%, targets in shares
+  approve 0xdd168fb9337a8fab83b6a089ba4902c75b167bacaec56edf4a8bf1ba7edc8d51
+  create  0xc4e3ae3f3c3e8530d9fc0b0a21b2542a0d20c7bf4196672302418df93fb4bb79
+
+Holdings start at zero against non-zero targets, so the basket begins at
+maximum distance and every admissible leg reduces it. The approval is for
+exactly the cap rather than unlimited, so the standing permission cannot
+outlive the bound it was granted for.
 tx        0xbe07505b8c1511536210cd9a8f9ec8bbe01fc147d3d6d9c67a2a3d0346a558b3
 
 The prediction held. The runtime code at that address hashes to
