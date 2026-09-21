@@ -30,7 +30,7 @@ contract CallerBindingTest is ParisArtifact {
     address constant NVDAX = 0xc845b2894dBddd03858fd2D643B4eF725fE0849d;
 
     /// @dev Frozen at nonce 0 until the deploy; see SPEC 14A.
-    address constant DEPLOYER = 0x2F45E637920Cc7C7BE15130ab49224C989572AD8;
+    address constant DEPLOYER = 0x083dCd15548a5a6504F774C7f16D28A454BfD656;
 
     VectraMandate internal vectra;
     address internal owner = address(0xBEEF11);

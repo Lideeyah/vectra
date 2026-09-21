@@ -651,13 +651,17 @@ The `userWalletAddress` requirement is now a verified constraint rather than an 
 **Answer it before deploying, not after.** A CREATE address is deterministic from the deployer and its nonce, so the contract's address is knowable before it exists. The deployer has **nonce 0** on X Layer, which puts the first deployment at:
 
 ```
-deployer  0x2F45E637920Cc7C7BE15130ab49224C989572AD8   (nonce 0)
-predicted 0xd24424Cc482D68b19e82aa7A6411C48aeD22215B
+deployer  0x083dCd15548a5a6504F774C7f16D28A454BfD656   (nonce 0)
+predicted 0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0
 ```
 
 **The prediction holds only while the deployer stays at nonce 0.** A CREATE address is a function of the deployer and its nonce, so any outbound transaction from that key before the deploy silently moves the address, and the payload would then be built for somewhere nothing lives.
 
 **Freeze the deployer.** Until the deploy transaction itself, that key sends nothing, approves nothing and funds nothing. Receiving is fine — an inbound transfer does not touch the nonce — so it can be topped up with OKB for gas without breaking the prediction. Only outbound transactions count.
+
+**RESOLVED: the deployer and the owner are now different keys.** The original wallet `0x2F45E637920Cc7C7BE15130ab49224C989572AD8` is an OKX MPC account, and MPC signing there refuses contract creation — proven, not inferred: the same wallet signed an ordinary 0-value transfer on X Layer successfully (`0x68f0771240b8f60b6bea379fd70ece5187cf17111ac68e73cc6dd50f83f9caa2`) while every contract-creation attempt came back as a rejection with the fee shown as "Free".
+
+So deployment moved to `0x083dCd15548a5a6504F774C7f16D28A454BfD656`, a key that can export and can create contracts. `0x2F45…AD8` keeps the USDC and remains the mandate owner. This is the arrangement the paragraph below asks for, arrived at by necessity rather than by design, and it removes the freeze constraint: the owner's approval no longer moves the contract address, because the owner is not the deployer.
 
 **The trap this creates in the existing flow.** Section 9.1 has the owner approving allowances before the mandate is created. If the owner and the deployer are the same key, that approval is an outbound transaction and it moves the address. So either the mandate owner is a different key from the deployer, or the deploy happens strictly first. The demo wallet is currently both, which makes this a live constraint rather than a hypothetical one.
 

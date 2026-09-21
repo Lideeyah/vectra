@@ -13,12 +13,12 @@ does not. So this runs at the *front* of a day, not the end of one.
 ## 0. Before anything is signed
 
 **The deployer must still be at nonce 0.** The contract address is a CREATE
-address predicted from `0x2F45E637920Cc7C7BE15130ab49224C989572AD8` at nonce 0,
+address predicted from `0x083dCd15548a5a6504F774C7f16D28A454BfD656` at nonce 0,
 and it is baked into `web/lib/config.ts`, the fork tests, and the caller-binding
 payload. One unrelated transaction from that account moves the address.
 
 ```bash
-cast nonce 0x2F45E637920Cc7C7BE15130ab49224C989572AD8 --rpc-url https://rpc.xlayer.tech
+cast nonce 0x083dCd15548a5a6504F774C7f16D28A454BfD656 --rpc-url https://rpc.xlayer.tech
 ```
 
 Must print `0`. If it does not, stop: the predicted address is wrong and every

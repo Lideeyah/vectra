@@ -16,7 +16,7 @@ export const CHAIN = {
 /** Predicted CREATE address (deployer 0x2F45…AD8 at nonce 0). SPEC 14A. */
 export const VECTRA_ADDRESS =
   (process.env.NEXT_PUBLIC_VECTRA_ADDRESS as `0x${string}`) ??
-  "0xd24424Cc482D68b19e82aa7A6411C48aeD22215B";
+  "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0";
 
 /** True once the address holds code. Checked at runtime, never assumed. */
 export const USDC = "0xB6CEceAB302E2E4948951eE7843FC24E92933061" as const;
