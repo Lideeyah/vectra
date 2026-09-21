@@ -91,12 +91,30 @@ agent.append_distance(ts, s2, leg, agent.total_distance(s2))
 s3 = state([50.0, None], [5000, 5000], total=50.0)
 agent.append_distance(ts, s3, None, agent.total_distance(s3))
 
+# A leg that was SELECTED but not EXECUTED must not read as executed. This is
+# the distinction the legs history and the distance chart are both built on.
+s4 = state([60.0, 40.0], [5000, 5000])
+agent.append_distance(ts, s4, leg, agent.total_distance(s4),
+                      execution={"executed": False, "reason": "reverted"})
+s5 = state([60.0, 40.0], [5000, 5000])
+agent.append_distance(ts, s5, leg, agent.total_distance(s5),
+                      execution={"executed": True, "txHash": "0xabc"})
+
 lines = (out / "distance.csv").read_text().strip().split("\n")
 check("header written once", lines[0].startswith("ts_utc,status,distance_bps"), True)
-check("three rows appended", len(lines) - 1, 3)
+check("five rows appended", len(lines) - 1, 5)
 check("priced row carries the number", lines[1].split(",")[2], "2000.0")
 check("leg row carries the leg", ",".join(lines[2].split(",")[6:9]), "sell,T0,5.00")
 check("partial row carries NA", lines[3].split(",")[1:3], "['partial', 'NA']")
+
+print("\nselected is not executed")
+head = lines[0].split(",")
+ex_i, tx_i = head.index("executed"), head.index("tx_hash")
+check("a leg with no execution is not executed", lines[1].split(",")[ex_i], "false")
+check("a FAILED send is not executed", lines[4].split(",")[ex_i], "false")
+check("...and records no tx hash", lines[4].split(",")[tx_i], "")
+check("a mined send IS executed", lines[5].split(",")[ex_i], "true")
+check("...and records its hash", lines[5].split(",")[tx_i], "0xabc")
 
 print(f"\n{'ALL PASS' if failures == 0 else f'{failures} FAILURE(S)'}")
 raise SystemExit(1 if failures else 0)

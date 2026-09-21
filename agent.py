@@ -50,7 +50,14 @@ SANITY_BAND = 0.25           # reject a price 25% off the previous cycle
 # trade that was simply better than expected. That works in testing and refuses
 # every leg on a volatile day. Size beneath the ceiling, never against it.
 RATE_HEADROOM = 0.80
+# Sit UNDER the dollar bounds as well as the rate bound. A leg sized exactly at
+# maxLegUsdc reverts if the contract's arithmetic rounds the other way, and a
+# leg that reverts costs gas and records nothing.
+LEG_HEADROOM = float(os.environ.get("VECTRA_LEG_HEADROOM", "0.95"))
 EXECUTE = os.environ.get("VECTRA_EXECUTE") == "1"
+# Build and estimate the real transaction but stop before broadcasting.
+DRY_SEND = os.environ.get("VECTRA_DRY_SEND") == "1"
+MANDATE_ID = int(os.environ.get("VECTRA_MANDATE_ID") or 0)
 
 SEL_BALANCE_OF = "0x70a08231"
 SEL_ALLOWANCE = "0xdd62ed3e"
@@ -91,13 +98,102 @@ def load_mandate():
     VECTRA_CONTRACT is set, chain state is the only source.
     """
     if CONTRACT:
-        raise SystemExit(
-            "On-chain mandate reads are not wired yet — the contract is not "
-            "deployed. Unset VECTRA_CONTRACT to run against data/agent/mandate.json."
-        )
+        return load_mandate_from_chain()
     if not MANDATE_FILE.exists():
         raise SystemExit(f"No mandate at {MANDATE_FILE}")
     return json.loads(MANDATE_FILE.read_text())
+
+
+# The contract exposes no getter for maxLegBpsOfTarget. It is fixed at creation
+# and no function changes it, so it is configuration here rather than a chain
+# read — but it IS a gap: every other bound the agent respects is read from the
+# contract, and this one is asserted. SPEC 16 records it.
+RATE_BPS_CONFIG = int(os.environ.get("VECTRA_RATE_BPS") or 0)
+
+
+def load_mandate_from_chain():
+    """The mandate as the CONTRACT holds it, not as a file describes it.
+
+    Reading limits from a file while the contract enforces its own is how an
+    agent ends up confidently proposing legs the chain refuses. Everything the
+    contract exposes is read from it; symbols and decimals come from the tokens
+    themselves.
+    """
+    from eth_abi import decode as abi_decode
+    import xlayer as chain
+
+    from eth_abi import encode as abi_encode
+    from eth_utils import keccak
+
+    def call(to, sig, types, *args):
+        sel = keccak(text=sig)[:4]
+        inner = sig[sig.index("(") + 1:sig.rindex(")")]
+        arg_types = [t for t in inner.split(",") if t]
+        data = "0x" + (sel + abi_encode(arg_types, list(args))).hex()
+        res = chain.eth_call(to, data)
+        if "error" in res:
+            raise SystemExit(f"{sig} on {to}: {json.dumps(res['error'])[:200]}")
+        return abi_decode(types, bytes.fromhex(res["result"][2:]))
+
+    if not MANDATE_ID:
+        raise SystemExit("VECTRA_MANDATE_ID is required when VECTRA_CONTRACT is set")
+
+    (owner, agent, expiry, paused, revoked, drift_bps, max_leg, total_cap,
+     spent, version) = call(
+        CONTRACT, "mandate(uint256)",
+        ["address", "address", "uint64", "bool", "bool", "uint16",
+         "uint256", "uint256", "uint256", "uint64"],
+        MANDATE_ID)
+
+    tokens, weights, targets = call(
+        CONTRACT, "basket(uint256)", ["address[]", "uint16[]", "uint256[]"],
+        MANDATE_ID)
+
+    if revoked:
+        raise SystemExit(f"mandate {MANDATE_ID} is revoked")
+    if paused:
+        raise SystemExit(f"mandate {MANDATE_ID} is paused by its owner")
+
+    rate_bps = RATE_BPS_CONFIG
+    if not rate_bps:
+        raise SystemExit(
+            "VECTRA_RATE_BPS must be set: the contract exposes no getter for "
+            "maxLegBpsOfTarget, and guessing the rate bound would mean sizing "
+            "legs against a limit the agent cannot see.")
+
+    # Symbols and decimals from the TOKENS, never a hardcoded map.
+    basket = []
+    for t, w, tg in zip(tokens, weights, targets):
+        try:
+            (sym,) = call(t, "symbol()", ["string"])
+        except SystemExit:
+            sym = f"{t[:6]}…{t[-4:]}"
+        try:
+            (dec,) = call(t, "decimals()", ["uint8"])
+        except SystemExit:
+            dec = 18
+        basket.append({
+            "symbol": sym,
+            "address": t.lower(),
+            "decimals": int(dec),
+            "weightBps": int(w),
+            "targetShares": int(tg),
+        })
+
+    return {
+        "source": "chain",
+        "mandateId": MANDATE_ID,
+        "owner": owner,
+        "agent": agent,
+        "expiry": int(expiry),
+        "version": int(version),
+        "driftToleranceBps": int(drift_bps),
+        "maxLegUsdc": max_leg / 10 ** USDC_DECIMALS,
+        "totalCapUsdc": total_cap / 10 ** USDC_DECIMALS,
+        "spentUsdc": spent / 10 ** USDC_DECIMALS,
+        "maxLegBpsOfTarget": rate_bps,
+        "basket": basket,
+    }
 
 
 def previous_prices():
@@ -249,16 +345,33 @@ def evaluate_legs(m, state):
         # with the other limits, and held under rather than met exactly.
         rate_usd = rate_cap_usd(m, p)
 
+        # Every limit, named. The binding one is recorded rather than the
+        # first one hit, because "why is the leg this size" and "what stopped
+        # it being larger" are the same question and only the smallest limit
+        # answers it.
         if p["driftBps"] < 0:
             # Underweight: buy with USDC. Spending consumes cap headroom.
-            size = min(gap_usd, m["maxLegUsdc"], remaining_cap,
-                       state["usdcValueUsd"], rate_usd)
+            limits = {
+                "drift gap": gap_usd,
+                "maxLegUsdc": m["maxLegUsdc"] * LEG_HEADROOM,
+                "remaining cap": remaining_cap * LEG_HEADROOM,
+                "usdc on hand": state["usdcValueUsd"],
+                "rate bound (maxLegBpsOfTarget)": rate_usd,
+            }
             direction, delta = "buy", +1
         else:
             # Overweight: sell into USDC. A sell commits no new capital, so it
             # does not consume cap headroom — see SPEC 5.2 on the cap decision.
-            size = min(gap_usd, m["maxLegUsdc"], p["valueUsd"] or 0, rate_usd)
+            limits = {
+                "drift gap": gap_usd,
+                "maxLegUsdc": m["maxLegUsdc"] * LEG_HEADROOM,
+                "position value": p["valueUsd"] or 0,
+                "rate bound (maxLegBpsOfTarget)": rate_usd,
+            }
             direction, delta = "sell", -1
+
+        binding = min(limits, key=lambda k: limits[k])
+        size = limits[binding]
 
         if size < 0.01:
             continue
@@ -274,6 +387,8 @@ def evaluate_legs(m, state):
             "distanceBefore": round(before, 2),
             "distanceAfter": round(after, 2),
             "reductionBps": round(before - after, 2),
+            "bindingConstraint": binding,
+            "limitsUsd": {k: round(v, 6) for k, v in limits.items()},
         })
 
     candidates.sort(key=lambda c: -c["reductionBps"])
@@ -317,6 +432,8 @@ def select_leg(m, state):
             "distanceBefore": best["distanceBefore"],
             "distanceAfter": best["distanceAfter"],
             "reductionBps": best["reductionBps"],
+            "bindingConstraint": best["bindingConstraint"],
+            "limitsUsd": best["limitsUsd"],
             "rejected": candidates[1:],
             "reason": (f"{best['symbol']} is {abs(best['driftBps'])}bps "
                        f"{'below' if best['driftBps'] < 0 else 'above'} target; "
@@ -410,10 +527,11 @@ def total_distance(state):
 
 DISTANCE_CSV = LOG_DIR / "distance.csv"
 DISTANCE_HEADER = ("ts_utc,status,distance_bps,total_usd,priced,positions,"
-                   "leg_direction,leg_symbol,leg_usd,distance_after\n")
+                   "leg_direction,leg_symbol,leg_usd,distance_after,"
+                   "executed,tx_hash,binding_constraint\n")
 
 
-def append_distance(started, state, leg, dist):
+def append_distance(started, state, leg, dist, execution=None):
     """One row per cycle, appended, never rewritten.
 
     The archives are timestamped files and raw file hosting serves no directory
@@ -437,6 +555,12 @@ def append_distance(started, state, leg, dist):
         leg["symbol"] if leg else "",
         f"{leg['amountUsd']:.2f}" if leg else "",
         leg["distanceAfter"] if leg else "",
+        # A SELECTED leg is not an EXECUTED one. These columns describe what
+        # the agent chose; this one describes what actually happened, and only
+        # a mined, successful transaction sets it.
+        "true" if (execution or {}).get("executed") else "false",
+        (execution or {}).get("txHash", "") or "",
+        (leg or {}).get("bindingConstraint", "") or "",
     ]) + "\n"
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -445,6 +569,93 @@ def append_distance(started, state, leg, dist):
     with DISTANCE_CSV.open("a") as fh:
         fh.write(row)
     return row.strip()
+
+
+MINOUT_HAIRCUT_BPS = int(os.environ.get("VECTRA_MINOUT_HAIRCUT_BPS", "50"))
+
+
+def do_execute(m, leg, payload, payload_err):
+    """Send the leg, or explain precisely why it was not sent.
+
+    Returns a dict that ALWAYS says whether a transaction executed. A send that
+    failed, reverted or was never attempted must never read as an execution —
+    the distance series and the legs history are both built from this, and a
+    cycle that claims a leg it did not take is worse than a cycle that did
+    nothing.
+    """
+    import send as sender
+
+    if not CONTRACT:
+        return {"executed": False, "reason": "no contract configured"}
+    if not MANDATE_ID:
+        return {"executed": False, "reason": "no mandate id configured"}
+    if leg is None:
+        return {"executed": False, "reason": "no leg selected this cycle"}
+    if not payload:
+        return {"executed": False, "reason": f"no payload: {payload_err}"}
+
+    agent_addr = sender.agent_address()
+    if not agent_addr:
+        return {"executed": False, "reason": "no agent key available"}
+    if agent_addr.lower() != (m.get("agent") or "").lower():
+        # The mandate names one agent. Signing with anything else reverts
+        # NotAgent, and spending gas to discover that is avoidable.
+        return {"executed": False,
+                "reason": f"key is {agent_addr}, mandate agent is {m.get('agent')}"}
+
+    # Amount in the units of the token being SENT.
+    if leg["direction"] == "buy":
+        amount_in = int(round(leg["amountUsd"] * 10 ** USDC_DECIMALS))
+    else:
+        amount_in = int(round((leg["amountUsd"] / leg["priceUsd"])
+                              * 10 ** leg["decimals"]))
+
+    # minOut BELOW the quote, never equal to it. The quote already carries the
+    # aggregator's slippage allowance; this sits under that, because a minOut
+    # set exactly at the quoted figure reverts on any adverse rounding and a
+    # revert costs gas and achieves nothing.
+    quoted = int(payload.get("minReceiveAmount") or 0)
+    if quoted <= 0:
+        return {"executed": False, "reason": "quote carried no minReceiveAmount"}
+    min_out = quoted * (10_000 - MINOUT_HAIRCUT_BPS) // 10_000
+    if min_out <= 0:
+        return {"executed": False, "reason": "minOut computed as zero"}
+
+    print(f"\nSENDING: {leg['direction']} {leg['symbol']} "
+          f"amountIn={amount_in} minOut={min_out} (quote {quoted}, "
+          f"{MINOUT_HAIRCUT_BPS}bps under)")
+
+    result, err = sender.send_execute(
+        contract=CONTRACT, mandate_id=MANDATE_ID,
+        token_in=leg["tokenInAddress"], token_out=leg["tokenOutAddress"],
+        amount_in=amount_in, min_out=min_out,
+        router_calldata=payload["data"], sweep=[],
+        dry_run=DRY_SEND,
+    )
+    if err:
+        print(f"  NOT SENT: {err}", file=sys.stderr)
+        return {"executed": False, "reason": err, "amountIn": str(amount_in),
+                "minOut": str(min_out)}
+    if DRY_SEND:
+        print(f"  DRY SEND ok, would use gas {result.get('gas')}")
+        return {"executed": False, "reason": "dry send; not broadcast",
+                "dryRun": result, "amountIn": str(amount_in),
+                "minOut": str(min_out)}
+
+    tx = result["txHash"]
+    print(f"  sent {tx}")
+    rcpt, rerr = sender.wait_for_receipt(tx)
+    if rerr or not rcpt:
+        return {"executed": False, "txHash": tx,
+                "reason": f"sent but no receipt: {rerr}"}
+    if rcpt["status"] != 1:
+        print(f"  REVERTED in block {rcpt['blockNumber']}", file=sys.stderr)
+        return {"executed": False, "txHash": tx, "reason": "transaction reverted",
+                "receipt": rcpt}
+
+    print(f"  MINED ok, block {rcpt['blockNumber']}, gas {rcpt['gasUsed']}")
+    return {"executed": True, "txHash": tx, "receipt": rcpt,
+            "amountIn": str(amount_in), "minOut": str(min_out)}
 
 
 def main():
@@ -494,9 +705,9 @@ def main():
     for r in state["refusals"]:
         print(f"  refused [{r['token']}]: {r['reason']}")
 
+    execution = None
     if EXECUTE:
-        print("\nEXECUTE requested but sending is not implemented: the contract "
-              "is not deployed. Nothing sent.", file=sys.stderr)
+        execution = do_execute(m, leg, payload, payload_err)
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     out = LOG_DIR / f"cycle_{started:%Y%m%dT%H%M%S}Z.json"
@@ -508,6 +719,7 @@ def main():
         "positions": state["positions"],
         "leg": leg, "noActionReason": why_not,
         "payload": payload, "payloadError": payload_err,
+        "execution": execution,
         "refusals": state["refusals"],
     }, indent=2) + "\n"
 
@@ -524,7 +736,7 @@ def main():
     dist = total_distance(state)
     print("\ndistance " + ("NA (not every position priced)" if dist is None
                             else f"{dist}bps"))
-    print("series += " + append_distance(started, state, leg, dist))
+    print("series += " + append_distance(started, state, leg, dist, execution))
 
     print(f"\nlogged {out} and {LOG_DIR / 'latest.json'}")
     return 0

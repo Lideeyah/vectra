@@ -1,0 +1,98 @@
+name: keeper
+
+# The agent, running against the LIVE mandate on X Layer.
+#
+# On its own clock, not the scheduler's. GitHub's cron is unreliable — the
+# recorder observed it firing roughly every four hours against a five minute
+# schedule — so each job stays alive and paces its own cycles. The schedule
+# here is a RESTART trigger, nothing more.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "1 = send real transactions. Anything else = decide only."
+        required: false
+        default: ""
+      dry_send:
+        description: "1 = build and estimate the real transaction, then stop."
+        required: false
+        default: ""
+      minutes:
+        description: "How long this job stays alive (default 170)."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  # Its own group. A dispatch outranks a schedule and would cancel a running
+  # job, which is how two recorder runs were lost.
+  group: keeper
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Install signing libraries
+        run: pip install --quiet eth-account eth-abi
+
+      - name: Cycle until the deadline
+        env:
+          OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
+          OKX_SECRET_KEY: ${{ secrets.OKX_SECRET_KEY }}
+          OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
+          OKX_PROJECT_ID: ${{ secrets.OKX_PROJECT_ID }}
+          # The agent key. Never echoed, never passed as an argument, and
+          # redacted out of any error string before it can reach a log.
+          VECTRA_AGENT_KEY: ${{ secrets.VECTRA_AGENT_KEY }}
+          VECTRA_CONTRACT: "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"
+          VECTRA_MANDATE_ID: "1"
+          VECTRA_RATE_BPS: "2000"
+          VECTRA_EXECUTE: ${{ inputs.execute || '1' }}
+          VECTRA_DRY_SEND: ${{ inputs.dry_send }}
+        run: |
+          set -uo pipefail
+          MINUTES="${{ inputs.minutes }}"
+          MINUTES="${MINUTES:-170}"
+          CYCLE_MIN=5
+          COMMIT_EVERY=3
+
+          # Fail loudly rather than running a blind cycle: a missing key means
+          # every send this job attempts will refuse, and a job that quietly
+          # decides for three hours without sending is not a keeper.
+          if [ -z "${VECTRA_AGENT_KEY:-}" ]; then
+            echo "::error::VECTRA_AGENT_KEY is not set in repository secrets"
+            exit 1
+          fi
+
+          DEADLINE=$(( $(date +%s) + MINUTES * 60 ))
+          n=0
+          while :; do
+            n=$((n + 1))
+            echo "=== cycle $n  $(date -u +%H:%M:%SZ)"
+            python agent.py || echo "  cycle exited non-zero; continuing"
+
+            if [ $((n % COMMIT_EVERY)) -eq 0 ]; then
+              ./scripts/commit_data.sh "agent: cycles through $(date -u +%Y-%m-%dT%H:%MZ)" data || true
+            fi
+
+            NEXT=$(( $(date +%s) + CYCLE_MIN * 60 ))
+            [ "$NEXT" -gt "$DEADLINE" ] && break
+            sleep $(( CYCLE_MIN * 60 ))
+          done
+
+          ./scripts/commit_data.sh "agent: final cycles $(date -u +%Y-%m-%dT%H:%MZ)" data || true
+          echo "ran $n cycle(s)"
+
+      - name: Commit whatever is left
+        if: always()
+        run: ./scripts/commit_data.sh "agent: cycles $(date -u +%Y-%m-%dT%H:%MZ)" data || true

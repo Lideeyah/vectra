@@ -734,6 +734,15 @@ The contract is deployed once and not redeployed after the agent is working, so 
 
 ## 16. OPEN ITEMS
 
+**No getter exposes `maxLegBpsOfTarget`.** Every other bound the agent respects
+is read from the contract — drift, the leg cap, the total cap, spend so far,
+the basket and its targets. The rate bound is the one limit it cannot see, so
+it is passed as configuration (`VECTRA_RATE_BPS`) and the agent refuses to run
+without it rather than guessing. It is fixed at creation and no function
+changes it, so the value cannot drift; but an agent asserting a limit the
+contract enforces is exactly the shape of mismatch this design otherwise
+avoids, and a future version should add the getter.
+
 Recorded as they are found, so the document does not quietly diverge from what is known.
 
 **Activation timestamps are not currently obtainable.** `api.backed.fi` is reachable but no asset route was discoverable, and the published documentation is client-rendered and could not be retrieved. The recorder samples `multiplier()` every five minutes, so a corporate event is detectable *after* it occurs, which is sufficient for interpreting the price series. It is not sufficient for section 14's requirement that the agent refuse to trade *before* activation. **This blocks that invariant, not the recorder.**
