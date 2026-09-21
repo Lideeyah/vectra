@@ -39,7 +39,16 @@ MANDATE_FILE = Path("data/agent/mandate.json")
 LOG_DIR = Path(os.environ.get("VECTRA_LOG_DIR", "data/agent"))
 
 PRICE_NOTIONAL_USD = 5.0     # size at which positions are valued
-SLIPPAGE_PERCENT = "0.5"
+# Slippage requested from the aggregator, which sets the router's OWN minimum
+# return inside the calldata. That check is what rejected every $0.19 leg on
+# 2026-09-21 with "Min return not reached" while $0.22 legs went through
+# minutes earlier — systematic, not price noise.
+#
+# The owner's protection does not come from this number: it comes from the
+# contract's minOut, the per-leg dollar cap and the rate bound. Raising it
+# gives the router room to fill a small leg; it does not widen what can be
+# lost, which is still bounded by the cap.
+SLIPPAGE_PERCENT = os.environ.get("VECTRA_SLIPPAGE_PERCENT", "1.0")
 THROTTLE_S = 1.1
 SANITY_BAND = 0.25           # reject a price 25% off the previous cycle
 
@@ -856,6 +865,8 @@ def run_cycle(mandate_id=None):
         "positions": state["positions"],
         "leg": leg, "noActionReason": why_not,
         "payload": payload, "payloadError": payload_err,
+        "slippagePercent": SLIPPAGE_PERCENT,
+        "minOutHaircutBps": MINOUT_HAIRCUT_BPS,
         "execution": execution,
         "refusals": state["refusals"],
     }, indent=2) + "\n"

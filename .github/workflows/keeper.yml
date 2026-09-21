@@ -60,6 +60,10 @@ jobs:
           # service is a keeper that services exactly one, and the next owner
           # to create one gets a page that never changes and no explanation.
           VECTRA_RATE_BPS: "2000"
+          # The router rejected every leg at 0.5%: "Min return not reached".
+          # What the owner can lose is bounded by the cap and the rate limit,
+          # not by this.
+          VECTRA_SLIPPAGE_PERCENT: "1.0"
           VECTRA_EXECUTE: ${{ inputs.execute || '1' }}
           VECTRA_DRY_SEND: ${{ inputs.dry_send }}
         run: |
