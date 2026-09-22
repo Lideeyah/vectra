@@ -24,6 +24,204 @@
       "txHash": "0x31a03b66589377a24810e2b6caa0988d324d6a4b181c92f41100dda91b27238f",
       "blockNumber": 71218954,
       "timestamp": 1789987990
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "193578",
+      "amountOut": "859666754315973",
+      "version": 2,
+      "txHash": "0x200694802ff5d164cef4b8f6da2fe7bfb4a45bd49dc7b32e67f1b46ada39455a",
+      "blockNumber": 71238053,
+      "timestamp": 1790007089
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "193728",
+      "amountOut": "859854622639741",
+      "version": 2,
+      "txHash": "0x841d40af942a173d4ba15a1893484d4733f81b4ffbf220b64a97cbf115768c6d",
+      "blockNumber": 71238366,
+      "timestamp": 1790007402
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "193829",
+      "amountOut": "859858484304223",
+      "version": 2,
+      "txHash": "0x146f92d6b1575527aa8ddb7a3c7101bed72e05f22ea79f1643eda6511926d55f",
+      "blockNumber": 71238679,
+      "timestamp": 1790007715
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190155",
+      "amountOut": "506167175491782",
+      "version": 2,
+      "txHash": "0x88c3292d6790821a2aad17f157bb49b3d414bd10d3541d8819f4151151d0f84f",
+      "blockNumber": 71267760,
+      "timestamp": 1790036796
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190207",
+      "amountOut": "506165656148955",
+      "version": 2,
+      "txHash": "0x5554c6765507373d4c6622e144df9f4cb6caf755645a4bcee23297c3ba32f8f4",
+      "blockNumber": 71268079,
+      "timestamp": 1790037115
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190208",
+      "amountOut": "506167610290402",
+      "version": 2,
+      "txHash": "0xdd4c8bfb8036aad20e9756e7e060e6de0ab4fcb2218dff6a9b7c94d14da4f9c4",
+      "blockNumber": 71268393,
+      "timestamp": 1790037429
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190208",
+      "amountOut": "506167499424060",
+      "version": 2,
+      "txHash": "0xb11b0eeb198740891b903dcaf14e781c2c051a6416a0cbf0281973d94857a8d7",
+      "blockNumber": 71268710,
+      "timestamp": 1790037746
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190213",
+      "amountOut": "506167522245294",
+      "version": 2,
+      "txHash": "0xc937baa328af3ecc4d16958332af3e73723d17251055a930c05eedb8e3d96537",
+      "blockNumber": 71269025,
+      "timestamp": 1790038061
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "190280",
+      "amountOut": "506166859700471",
+      "version": 2,
+      "txHash": "0x4a61352055f8323e4f175cf5f23cb881672c798dcc65627db1175a224e8c74a3",
+      "blockNumber": 71269342,
+      "timestamp": 1790038378
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189093",
+      "amountOut": "558034325212703",
+      "version": 2,
+      "txHash": "0x09d6285cd0aa97cf27de7530ac699516c997582ee9626faed2513bc7a8a1f5a6",
+      "blockNumber": 71269671,
+      "timestamp": 1790038707
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189094",
+      "amountOut": "558031237016486",
+      "version": 2,
+      "txHash": "0x71931e18a10da30cc8860ffd81a5ccacd4ffc32f88f2e4cf761c782a849425be",
+      "blockNumber": 71269991,
+      "timestamp": 1790039027
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189097",
+      "amountOut": "558033336990064",
+      "version": 2,
+      "txHash": "0xcc88eb85f8e5aebf4abc3c425b59c235cf85714a0dfa08f8119cf9b8ab79dc34",
+      "blockNumber": 71270309,
+      "timestamp": 1790039345
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189098",
+      "amountOut": "558033201402564",
+      "version": 2,
+      "txHash": "0xac5adc055b045203bc0f1670652348cc901eecc1906c75af0c3902ae5d4d2587",
+      "blockNumber": 71270627,
+      "timestamp": 1790039663
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189107",
+      "amountOut": "558033450560740",
+      "version": 2,
+      "txHash": "0x48611f2c69e60086b00ea4a9bff6a32edc7812bc960d7a684df1cfba535d166b",
+      "blockNumber": 71270945,
+      "timestamp": 1790039981
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "189109",
+      "amountOut": "558033100353267",
+      "version": 2,
+      "txHash": "0x5403b479f455f640b38e614d080b4bdd86731f807ead67b171ab4426dc73c785",
+      "blockNumber": 71271262,
+      "timestamp": 1790040298
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "174970",
+      "amountOut": "768216224690307",
+      "version": 2,
+      "txHash": "0xd59554f2b7215a6156fba2b6cf2a20a7a6e7122b1d9f645b3cb1bc0b3b19e12d",
+      "blockNumber": 71271584,
+      "timestamp": 1790040620
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "42966",
+      "amountOut": "114170077533187",
+      "version": 2,
+      "txHash": "0xd12a360cdf11f94026acfe475fabf331983da78c80473d1eb83d05be58c62054",
+      "blockNumber": 71271900,
+      "timestamp": 1790040936
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "42557",
+      "amountOut": "125568456404445",
+      "version": 2,
+      "txHash": "0xf309bb550986f60f8ce5e1a5247532ce4b130ec1d3a797c2708e8cb6d72f6839",
+      "blockNumber": 71272212,
+      "timestamp": 1790041248
     }
   ],
   "amendments": [
@@ -56,6 +254,23 @@
       "timestamp": 1789988182,
       "txHash": "0x0e9a087e54d4c6db21f253e299387214e4680c5c05ad41a288701ac2770f1b0b",
       "blockNumber": 71219146
+    },
+    {
+      "id": "1",
+      "previous": [
+        "5365020579939101",
+        "3163548824427970",
+        "3476361388686300"
+      ],
+      "current": [
+        "5794222226334229",
+        "3416632730382208",
+        "3754470299781204"
+      ],
+      "version": 3,
+      "timestamp": 1790064273,
+      "txHash": "0xdc792eace595f733a0d935422ff4883961acaa8041508cfae9d558b6debcea26",
+      "blockNumber": 71295237
     }
   ]
 }
