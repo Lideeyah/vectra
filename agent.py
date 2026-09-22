@@ -377,9 +377,32 @@ def evaluate_legs(m, state):
 
     candidates = []
     for i, p in enumerate(positions):
-        if not p["priceUsd"] or abs(p["driftBps"]) <= tol:
+        if not p["priceUsd"]:
             continue
-        gap_usd = (abs(p["driftBps"]) / 10_000) * total
+
+        # OFF TARGET IS MEASURED IN SHARES, because that is what the mandate
+        # states and what the contract enforces.
+        #
+        # This used to compare WEIGHT drift against the tolerance, and the
+        # three layers disagreed: the contract holds share targets, the
+        # interface shows the share gap, and the agent decided on weights.
+        # Raising every target by 8% on 2026-09-22 moved the displayed distance
+        # from 2.37% to 24.43% and moved the agent's input by nothing at all —
+        # it sat idle with $0.53 unspent and every position 8% short, reporting
+        # "within tolerance". An owner cannot amend a target the agent does not
+        # look at.
+        tgt = p.get("targetShares")
+        held = p.get("shares")
+        if not tgt or held is None:
+            continue
+        share_drift_bps = (held - tgt) / tgt * 10_000
+        p["shareDriftBps"] = round(share_drift_bps, 2)
+        if abs(share_drift_bps) <= tol:
+            continue
+
+        # The distance to close, in dollars, from the share gap rather than
+        # from a weight difference.
+        gap_usd = gap_to_target_usd(p, "buy" if share_drift_bps < 0 else "sell")
 
         # The contract's rate bound, expressed in dollars so it can be compared
         # with the other limits, and held under rather than met exactly.
@@ -389,8 +412,8 @@ def evaluate_legs(m, state):
         # first one hit, because "why is the leg this size" and "what stopped
         # it being larger" are the same question and only the smallest limit
         # answers it.
-        if p["driftBps"] < 0:
-            # Underweight: buy with USDC. Spending consumes cap headroom.
+        if share_drift_bps < 0:
+            # Under target: buy with USDC. Spending consumes cap headroom.
             limits = {
                 "drift gap": gap_usd,
                 "maxLegUsdc": m["maxLegUsdc"] * LEG_HEADROOM,
@@ -401,7 +424,7 @@ def evaluate_legs(m, state):
             }
             direction, delta = "buy", +1
         else:
-            # Overweight: sell into USDC. A sell commits no new capital, so it
+            # Over target: sell into USDC. A sell commits no new capital, so it
             # does not consume cap headroom — see SPEC 5.2 on the cap decision.
             limits = {
                 "drift gap": gap_usd,
@@ -426,6 +449,7 @@ def evaluate_legs(m, state):
             "address": p["address"], "amountUsd": round(size, 6),
             "priceUsd": p["priceUsd"], "decimals": p["decimals"],
             "driftBps": p["driftBps"],
+            "shareDriftBps": p["shareDriftBps"],
             "distanceBefore": round(before, 2),
             "distanceAfter": round(after, 2),
             "reductionBps": round(before - after, 2),
@@ -449,10 +473,16 @@ def select_leg(m, state):
     if not priced:
         return None, "no position has a usable price this cycle"
 
-    largest = max(priced, key=lambda p: abs(p["driftBps"]))
-    if abs(largest["driftBps"]) <= tol:
-        return None, (f"largest drift {abs(largest['driftBps'])}bps is within "
-                      f"tolerance {tol}bps")
+    def share_drift(p):
+        tgt, held = p.get("targetShares"), p.get("shares")
+        if not tgt or held is None:
+            return 0.0
+        return (held - tgt) / tgt * 10_000
+
+    largest = max(priced, key=lambda p: abs(share_drift(p)))
+    if abs(share_drift(largest)) <= tol:
+        return None, (f"largest gap to target {abs(share_drift(largest)):.0f}bps "
+                      f"is within tolerance {tol}bps, measured in shares")
 
     before, candidates = evaluate_legs(m, state)
     state["distanceBefore"] = round(before, 2)
@@ -474,6 +504,7 @@ def select_leg(m, state):
             "distanceBefore": best["distanceBefore"],
             "distanceAfter": best["distanceAfter"],
             "reductionBps": best["reductionBps"],
+            "shareDriftBps": best.get("shareDriftBps"),
             "bindingConstraint": best["bindingConstraint"],
             "limitsUsd": best["limitsUsd"],
             "rejected": candidates[1:],
@@ -485,8 +516,11 @@ def select_leg(m, state):
         return leg, None
 
     # Nothing admissible. Name the binding constraint, not the first blocker.
-    under = [p for p in priced if p["driftBps"] < -tol]
-    over = [p for p in priced if p["driftBps"] > tol]
+    # In SHARE space, like every other decision here — this list used to be
+    # built from weight drift, so once the agent moved to share targets it
+    # reported "no admissible leg" with nothing named.
+    under = [p for p in priced if share_drift(p) < -tol]
+    over = [p for p in priced if share_drift(p) > tol]
     remaining_cap = m["totalCapUsdc"] - m["spentUsdc"]
 
     if remaining_cap <= 0 and under and not over:
@@ -496,7 +530,7 @@ def select_leg(m, state):
 
     blockers = []
     for p in under:
-        need = min((abs(p["driftBps"]) / 10_000) * state["totalUsd"], m["maxLegUsdc"])
+        need = min(gap_to_target_usd(p, "buy"), m["maxLegUsdc"])
         if state["usdcValueUsd"] < 0.01:
             blockers.append(f"{p['symbol']} needs ~${need:.2f} but the owner "
                             f"holds no USDC")
@@ -506,8 +540,8 @@ def select_leg(m, state):
         else:
             blockers.append(f"{p['symbol']} leg sizes below the ${0.01:.2f} minimum")
     for p in over:
-        blockers.append(f"{p['symbol']} is +{p['driftBps']}bps but its sellable "
-                        f"value is ${p['valueUsd'] or 0:.2f}")
+        blockers.append(f"{p['symbol']} is +{share_drift(p):.0f}bps above target "
+                        f"but its sellable value is ${p['valueUsd'] or 0:.2f}")
 
     return None, ("no admissible leg: " + "; ".join(blockers)) if blockers else (
         None, "no admissible leg this cycle")

@@ -14,7 +14,7 @@ def mandate(cap=50.0, spent=0.0, max_leg=5.0, rate_bps=2000):
             "maxLegBpsOfTarget": rate_bps, "basket": []}
 
 
-def position(sym, value, target, price=100.0, target_shares=10 * 10 ** 18):
+def position(sym, value, target, price=100.0, target_shares=None):
     return {"symbol": sym, "address": "0x" + sym.encode().hex().ljust(40, "0")[:40],
             "decimals": 18, "priceUsd": price, "valueUsd": value,
             "targetWeightBps": target, "targetShares": target_shares,
@@ -26,6 +26,19 @@ def state(positions, usdc):
     for p in positions:
         p["actualWeightBps"] = int(round(p["valueUsd"] / total * 10_000))
         p["driftBps"] = p["actualWeightBps"] - p["targetWeightBps"]
+        # Shares held, derived from the value so the two spaces describe the
+        # same position. The agent decides on the SHARE gap — that is what the
+        # mandate states and what the contract enforces — so a fixture without
+        # shares would exercise nothing.
+        p["shares"] = int(p["valueUsd"] / p["priceUsd"]
+                          * 10 ** p["decimals"] / (p["multiplier"] or 1))
+        # Target shares that MEAN the same thing as the target weight, unless a
+        # test states its own. A fixture whose share target and weight target
+        # describe different positions tests neither.
+        if p.get("targetShares") is None:
+            p["targetShares"] = int(p["targetWeightBps"] / 10_000 * total
+                                    / p["priceUsd"] * 10 ** p["decimals"]
+                                    / (p["multiplier"] or 1))
     return {"positions": positions, "usdcValueUsd": usdc, "totalUsd": total,
             "investedUsd": total - usdc, "usdcBalance": int(usdc * 1e6),
             "refusals": []}
@@ -106,8 +119,12 @@ def test_cap_blocks_buy_but_not_sell():
 def test_refusal_names_the_binding_constraint():
     """Underweight, no cash, nothing sellable: say which, and how much."""
     s = state([position("AAAx", 100.0, 5000), position("BBBx", 100.0, 5000)], usdc=0.0)
-    s["positions"][0]["driftBps"] = -3000   # force an underweight with no funding
-    s["positions"][1]["driftBps"] = 0
+    # Force the gap in SHARES, which is the space the agent decides in. Setting
+    # driftBps here used to do it; once the agent moved to share targets that
+    # line changed nothing and the test was asserting against a position the
+    # agent considered already on target.
+    s["positions"][0]["shares"] = int(s["positions"][0]["targetShares"] * 0.70)
+    s["positions"][1]["shares"] = s["positions"][1]["targetShares"]
     leg, why = agent.select_leg(mandate(), s)
     show("underweight with no funding", s, leg, why)
     assert leg is None
@@ -124,14 +141,22 @@ def test_leg_is_sized_under_the_rate_bound_not_against_it():
     and the refusal log shows a rate-limit breach on a trade that was merely
     better than expected. The agent must stay beneath the ceiling.
     """
-    # target 10e18 shares at 2000bps = 2e18 shares permitted, at $100 = $200.
     s = state([position("AAAx", 100.0, 9000), position("BBBx", 900.0, 1000)], usdc=500.0)
     m = mandate(cap=10_000.0, max_leg=1_000.0)
     leg, why = agent.select_leg(m, s)
     show("rate bound with headroom", s, leg, why)
 
     assert leg is not None, why
-    ceiling = 200.0                    # what the contract would permit
+
+    # The ceiling is COMPUTED from the position the fixture actually describes,
+    # not written down. It used to be a hardcoded $200 that matched a fixed
+    # share target; once targets were derived from the weight target that
+    # number silently described a different position, and the test would have
+    # failed for being stale rather than for the agent being wrong.
+    chosen = next(p for p in s["positions"] if p["symbol"] == leg["symbol"])
+    ceiling = (chosen["targetShares"] * m["maxLegBpsOfTarget"] / 10_000
+               * (chosen["multiplier"] or 1) / 10 ** chosen["decimals"]
+               * chosen["priceUsd"])
     assert leg["amountUsd"] <= ceiling * agent.RATE_HEADROOM + 1e-9, \
         f"leg sized at {leg['amountUsd']}, must stay under {ceiling}"
     assert leg["amountUsd"] < ceiling, "no headroom beneath the ceiling"
