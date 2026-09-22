@@ -1,10 +1,10 @@
 {
-  "ts": "2026-09-22T08:07:12+00:00",
+  "ts": "2026-09-22T08:01:59+00:00",
   "mode": "execute",
   "mandateId": 1,
   "owner": "0x2f45e637920cc7c7be15130ab49224c989572ad8",
   "contract": "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0",
-  "totalUsd": 4.096282750843106,
+  "totalUsd": 4.097891919138003,
   "usdcValueUsd": 0.533971,
   "positions": [
     {
@@ -14,12 +14,12 @@
       "balance": 5288743876947857,
       "shares": 5279761962786333,
       "multiplier": 1.001701196801074,
-      "priceUsd": 226.44467883973192,
-      "valueUsd": 1.197607908681056,
+      "priceUsd": 226.43033317244814,
+      "valueUsd": 1.1975320381210484,
       "targetWeightBps": 3400,
-      "targetShares": 5794222226334229,
-      "actualWeightBps": 2924,
-      "driftBps": -476
+      "targetShares": 5365020579939101,
+      "actualWeightBps": 2922,
+      "driftBps": -478
     },
     {
       "symbol": "TSLAx",
@@ -28,12 +28,12 @@
       "balance": 3151172400834151,
       "shares": 3151172400834151,
       "multiplier": 1.0,
-      "priceUsd": 375.6964558576961,
-      "valueUsd": 1.1838843027899777,
+      "priceUsd": 376.3146626707049,
+      "valueUsd": 1.1858323790371388,
       "targetWeightBps": 3300,
-      "targetShares": 3416632730382208,
-      "actualWeightBps": 2890,
-      "driftBps": -410
+      "targetShares": 3163548824427970,
+      "actualWeightBps": 2894,
+      "driftBps": -406
     },
     {
       "symbol": "AAPLx",
@@ -42,16 +42,16 @@
       "balance": 3473767107940264,
       "shares": 3462448320960570,
       "multiplier": 1.0032690125398187,
-      "priceUsd": 339.92478559457254,
-      "valueUsd": 1.1808195393720726,
+      "priceUsd": 339.8490645159615,
+      "valueUsd": 1.1805565019798159,
       "targetWeightBps": 3300,
-      "targetShares": 3754470299781204,
-      "actualWeightBps": 2883,
-      "driftBps": -417
+      "targetShares": 3476361388686300,
+      "actualWeightBps": 2881,
+      "driftBps": -419
     }
   ],
   "leg": null,
-  "noActionReason": "largest drift 476bps is within tolerance 500bps",
+  "noActionReason": "largest drift 478bps is within tolerance 500bps",
   "payload": null,
   "payloadError": null,
   "slippagePercent": "1.0",
