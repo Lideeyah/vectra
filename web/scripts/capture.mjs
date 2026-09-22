@@ -77,6 +77,16 @@ const timeline = [];   // { file, frames }
  * seconds costs twelve seconds of capture instead of three minutes of it.
  * Without the flag everything is captured fresh.
  */
+/**
+ * One-time sign-in for the capture profile.
+ *
+ *   ./scripts/capture.sh --login
+ *
+ * GitHub requires a session to view Actions logs even on a public repository,
+ * and the live-cycle shot films a running job's log. Signing in once, by hand,
+ * beats a capture walking into a login wall halfway through.
+ */
+const LOGIN = process.argv.includes("--login");
 const ONLY = (process.argv.find((a) => a.startsWith("--only")) ?? "")
   .replace(/^--only[= ]?/, "") || null;
 const MANIFEST = path.join(OUT, "shots.json");
@@ -211,7 +221,24 @@ async function card(page, html, seconds) {
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
+async function signIn() {
+  const c = await chromium.launchPersistentContext(PROFILE, {
+    headless: false, viewport: { width: 1280, height: 900 },
+  });
+  const pg = c.pages()[0] ?? await c.newPage();
+  await pg.goto("https://github.com/login");
+  console.log("Sign in to GitHub in the window that opened; this closes itself.");
+  for (let i = 0; i < 600; i++) {
+    await pg.waitForTimeout(1000);
+    const ok = await pg.evaluate(() =>
+      !!document.querySelector('meta[name="user-login"]')).catch(() => false);
+    if (ok) { console.log("signed in; profile saved"); break; }
+  }
+  await c.close();
+}
+
 async function main() {
+  if (LOGIN) return signIn();
   // Only wipe when recording everything; a targeted re-render needs the
   // other shots' stills to still be there.
   if (!ONLY) rmSync(FRAMES, { recursive: true, force: true });
@@ -279,24 +306,22 @@ async function main() {
   need(facts.rate && facts.rate !== "—", "rate bound renders as a dash (shot 1:05)");
 
   const legHash = (facts.legs.join(" ").match(/0x[0-9a-f]{64}/i) ?? [])[0];
+  let distanceBefore = null;   // 0:40, compared against 2:05
+  let cycleTx = null;          // the hash the filmed cycle actually sent
 
   // ---- 0:00 title --------------------------------------------------------
   await shot("title", async () => {
     await card(page, `<div class="title">A twenty two cent trade.</div>`, 3);
   });
 
-  // ---- 0:03 the executed leg on the explorer -----------------------------
+  // ---- 0:03 the most recent executed leg on the explorer ------------------
   await shot("tx", async () => {
-    if (legHash) {
-      await page.goto(`${EXPLORER}/tx/${legHash}`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(9000);
-      await freeze(page);
-      const shown = await page.evaluate((h) => document.body.innerText.includes(h.slice(0, 20)), legHash);
-      need(shown, `explorer did not render tx ${legHash} (shot 0:03)`);
-      await hold(page, 17);
-    } else {
-      await card(page, `<pre>no executed leg to show</pre>`, 17);
-    }
+    await page.goto(`${EXPLORER}/tx/${legHash}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    need(await page.evaluate((h) => document.body.innerText.includes(h.slice(0, 20)), legHash),
+         `explorer did not render tx ${legHash} (shot 0:03)`);
+    await hold(page, 17);
   });
 
   // ---- 0:20 the cycle log -------------------------------------------------
@@ -306,71 +331,138 @@ async function main() {
     await freeze(page);
     await page.evaluate(() => document.querySelector("[data-testid=refusals]")
       ?.scrollIntoView({ block: "start" }));
-    await motion(page, 20, 40, async (i) => {
-      await page.evaluate((n) => window.scrollBy(0, n === 0 ? 0 : 14), i);
+    await motion(page, 20, 40, async (n) => {
+      await page.evaluate((k) => window.scrollBy(0, k === 0 ? 0 : 14), n);
     });
   });
 
-  // ---- 0:40 convergence ---------------------------------------------------
-  await shot("convergence", async () => {
+  // ---- 0:40 convergence BEFORE -------------------------------------------
+  await shot("convergence-before", async () => {
+    await page.goto(app, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    distanceBefore = await page.evaluate(() =>
+      document.querySelector("[data-testid=distance-hero]")?.innerText ?? "");
+    need(distanceBefore && distanceBefore !== "—",
+         "distance hero empty before the cycle (shot 0:40)");
+    console.log(`  distance before: ${distanceBefore}%`);
     await shotOf(page, "[data-testid=convergence]", 25);
   });
 
-  // ---- 1:05 the mandate ---------------------------------------------------
-  await shot("mandate", async () => {
-    await shotOf(page, "[data-testid=rules]", 30);
+  // ---- 1:05 ONE FULL CYCLE, LIVE -----------------------------------------
+  //
+  // The running keeper's log, streamed, uncut. NOT a local terminal: the OKX
+  // aggregator is unreachable from this machine and the agent key is not here,
+  // so a cycle cannot run locally. NOT a replay of recorded output rendered
+  // into a terminal, because on screen that is indistinguishable from a live
+  // run and it is not one.
+  await shot("livecycle", async () => {
+    const runs = await (await fetch(
+      "https://api.github.com/repos/Lideeyah/vectra/actions/runs?per_page=20")).json();
+    const runId = (runs.workflow_runs ?? [])
+      .find((r) => r.name === "keeper" && r.status === "in_progress")?.id;
+    if (!need(runId, "no keeper run is in progress to film (shot 1:05)")) return;
+
+    const jobs = await (await fetch(
+      `https://api.github.com/repos/Lideeyah/vectra/actions/runs/${runId}/jobs`)).json();
+    const job = (jobs.jobs ?? []).find((j) => j.status === "in_progress");
+    if (!need(job, "keeper run has no in-progress job (shot 1:05)")) return;
+
+    await page.goto(job.html_url, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(8000);
+    const gate = await page.evaluate(() => document.body.innerText);
+    if (!need(!/Sign in to view logs/i.test(gate),
+              "not signed in to GitHub — run ./scripts/capture.sh --login once (shot 1:05)")) return;
+    await freeze(page);
+
+    await page.getByText("Cycle until the deadline").first().click().catch(() => {});
+    await page.waitForTimeout(2500);
+
+    // Join a cycle at its START, so the take covers a whole one.
+    const text = () => page.evaluate(() => document.body.innerText);
+    let base = await text();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 6 * 60 * 1000) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const t = await text();
+      if (t.length < base.length) base = t;
+      if (/SENDING:/.test(t.slice(base.length))) break;
+      await page.waitForTimeout(3000);
+    }
+
+    await motion(page, 45, 30, async () => {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(1100);
+    });
+
+    const log = await text();
+    cycleTx = (log.match(/sent (0x[0-9a-f]{64})/i) ?? [])[1] ?? null;
+    need(/MINED ok/.test(log) || cycleTx,
+         "the filmed cycle did not execute — re-run rather than film a refusal (shot 1:05)");
+    if (cycleTx) console.log(`  cycle sent ${cycleTx}`);
   });
 
-  // ---- 1:35 proof, then the source page -----------------------------------
-  await shot("proof", async () => {
-    await shotOf(page, "[data-testid=proof]", 13);
+  // ---- 1:50 that transaction on the explorer ------------------------------
+  await shot("newtx", async () => {
+    const h = cycleTx ?? legHash;
+    await page.goto(`${EXPLORER}/tx/${h}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(9000);
+    await freeze(page);
+    need(await page.evaluate((x) => document.body.innerText.includes(x.slice(0, 20)), h),
+         `explorer did not render ${h} (shot 1:50)`);
+    await hold(page, 15);
+  });
 
+  // ---- 2:05 convergence AFTER, and it must be LOWER -----------------------
+  await shot("convergence-after", async () => {
+    await page.goto(`${app}&t=${Date.now()}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(11000);
+    await freeze(page);
+    const after = await page.evaluate(() =>
+      document.querySelector("[data-testid=distance-hero]")?.innerText ?? "");
+    console.log(`  distance after: ${after} (was ${distanceBefore})`);
+    need(parseFloat(after) < parseFloat(distanceBefore),
+         `distance did not fall: before ${distanceBefore}, after ${after} (shot 2:05)`);
+    await shotOf(page, "[data-testid=convergence]", 15);
+  });
+
+  // ---- 2:20 the mandate ---------------------------------------------------
+  await shot("mandate", async () => { await shotOf(page, "[data-testid=rules]", 12); });
+
+  // ---- 2:32 proof, then the verified source -------------------------------
+  await shot("proof", async () => {
+    await shotOf(page, "[data-testid=proof]", 5);
     await page.goto(SOURCE_PAGE, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(6000);
     await freeze(page);
     const src = await page.evaluate(() => document.body.innerText);
     need(/metadata\.json/i.test(src) && /sources/i.test(src),
-         "Sourcify has no verified sources for this address (shot 1:35)");
-    await hold(page, 12);
+         "Sourcify has no verified sources for this address (shot 2:32)");
+    await hold(page, 5);
   });
 
-  // ---- 2:00 rules and the cap, then the test running ----------------------
-  await shot("capandtest", async () => {
-    await page.goto(app, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(9000);
-    await freeze(page);
-    await shotOf(page, "[data-testid=rules]", 8);
-
-    // 22s over 22 steps: one frame-run per second, so the rounding in motion()
-    // divides evenly instead of losing a third of a second.
-    const lines = testOut.trimEnd().split("\n").slice(-22);
-    await motion(page, 22, Math.min(lines.length, 22), async (i) => {
-      const body = esc(lines.slice(0, i + 1).join("\n"))
+  // ---- 2:42 the loss stopping at the cap ----------------------------------
+  await shot("blastradius", async () => {
+    const lines = testOut.trimEnd().split("\n").slice(-10);
+    await motion(page, 10, 10, async (n) => {
+      const body = esc(lines.slice(0, n + 1).join("\n"))
         .replace(/(\[PASS\][^\n]*)/g, '<span class="ok">$1</span>');
       await page.setContent(`<!doctype html><meta charset="utf-8"><style>
-        html,body{margin:0;height:100%;background:#000;color:#e2e8f0;
-          font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;}
-        pre{margin:0;padding:56px;font-size:24px;line-height:1.5;white-space:pre-wrap;}
+        html{height:100%}
+        body{margin:0;height:100vh;background:#000;color:#e2e8f0;
+          font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;
+          display:flex;align-items:center;box-sizing:border-box;padding:72px;}
+        pre{margin:0;font-size:26px;line-height:1.5;white-space:pre-wrap;width:100%;}
         .ok{color:#4ade80;}</style><pre>$ forge test --match-test test_Cap_ -vv\n\n${body}</pre>`);
     });
   });
 
-  // ---- 2:30 legs, refusals, chart -----------------------------------------
-  await shot("evidence", async () => {
-    await page.goto(app, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(9000);
-    await freeze(page);
-    await shotOf(page, "[data-testid=legs]", 8);
-    await shotOf(page, "[data-testid=refusals]", 6);
-    await shotOf(page, "[data-testid=distance-chart]", 6);
-  });
-
-  // ---- 2:50 the contract, held ---------------------------------------------
+  // ---- 2:52 the contract, held --------------------------------------------
   await shot("contract", async () => {
     await page.goto(`${EXPLORER}/address/${CONTRACT}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(9000);
     await freeze(page);
-    await hold(page, 10);
+    await hold(page, 8);
   });
 
   await ctx.close();
