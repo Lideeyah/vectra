@@ -9,7 +9,7 @@ Vectra is a self maintaining basket of tokenised equities on X Layer: an owner s
 | Contract | [`0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0`](https://www.oklink.com/x-layer/address/0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0) (Contracts tab, source verified) |
 | Chain | X Layer, chain id 196 |
 | App | https://vectra-market.vercel.app |
-| Demo | `data/demo/vectra-demo.mp4`, 3:00 |
+| Demo | [youtu.be/QD2a7lPcwrk](https://youtu.be/QD2a7lPcwrk), 3:00 |
 
 Read from the contract at **2026-09-22T11:51Z** by calling `mandate(1)`, not copied from a log:
 
@@ -38,9 +38,13 @@ Fields are in the order given by `Mandate` in [contracts/VectraMandate.sol](cont
 Everything below runs from a fresh clone. The only external dependency is [Foundry](https://book.getfoundry.sh/getting-started/installation) for `cast` and `forge`, plus Python 3. The RPC is the public X Layer endpoint `https://rpc.xlayer.tech` and needs no key or account.
 
 ```bash
-git clone https://github.com/Lideeyah/vectra && cd vectra
+git clone --recursive https://github.com/Lideeyah/vectra && cd vectra
 forge build
 ```
+
+`--recursive` is not optional. OpenZeppelin and forge-std are git submodules, so
+a plain clone leaves `lib/` empty and `forge build` fails. If you already cloned
+without it, run `git submodule update --init --recursive`.
 
 ### 1. The deployed bytecode is the source in this repo
 
@@ -119,11 +123,20 @@ Loss is also bounded in practice by how little the key holds: the agent address 
 
 ```bash
 forge build
-./scripts/test.sh              # unit and adversarial suites
-./scripts/test.sh --fork       # fork suite, needs the X Layer RPC
+./scripts/test.sh              # 61 tests, unit and adversarial
+./scripts/test.sh --fork       # the above plus 15 against forked X Layer
 
-cd web && npm install && npm run dev
+cd web && npm install && npm run dev   # http://localhost:3000
 ```
+
+The fork suite needs only the public RPC, no key and no account. It skips
+`test/fork/CallerBinding.t.sol` and says so, because that test replays a real
+aggregator payload from `VECTRA_PAYLOAD`, which `fetch_payload.py` produces and
+which needs OKX credentials. A missing credential is not a broken contract.
+
+The interface needs no configuration to run. Every value falls back to the live
+deployment, so a fresh clone points at the real contract and the committed data
+without an env file.
 
 The fork suite runs under its own profile at `evm_version = cancun` because the forked chain runs Uniswap V4, which needs transient storage. The deployment profile stays pinned at `paris` for reproducibility. `./scripts/test.sh --prove-split` asserts the two cannot be run under each other by accident.
 

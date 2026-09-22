@@ -18,6 +18,14 @@ run() {
   local label="$1"; shift
   echo "=== $label"
   if "$@" >"$OUT" 2>&1; then
+    # A suite that matched nothing exits 0 and reads as a pass. That is the
+    # same "check that cannot fail" this script exists to stop, so it is an
+    # error here rather than three green lines over an empty run.
+    if grep -q "No tests found in project" "$OUT"; then
+      echo "FAILED: matched no tests at all"
+      tail -5 "$OUT"
+      return 1
+    fi
     tail -3 "$OUT"
   else
     local rc=$?
@@ -50,8 +58,29 @@ fi
 run "default suites (profile: default, evm: paris)" forge test
 
 if [[ "${1:-}" == "--fork" ]]; then
-  run "fork suites (profile: fork, evm: cancun)" env FOUNDRY_PROFILE=fork \
-    forge test --match-path "test/fork/*" --fork-url xlayer
+  # FOUNDRY_NO_MATCH_PATH= is required, not decorative: the fork profile
+  # INHERITS no_match_path="test/fork/*" from the default profile, so without
+  # clearing it the exclusion cancels the --match-path and zero tests run while
+  # forge still exits 0. --prove-split clears it; this path did not, and the
+  # suite reported ALL PASS over nothing.
+  # EvmProfile asserts which EVM it is on and must be TOLD which to expect;
+  # under this profile the answer is cancun. Without it the probe fails here
+  # while being correct, which is a confusing way to be right.
+  #
+  # CallerBinding replays a REAL aggregator payload and needs VECTRA_PAYLOAD
+  # from fetch_payload.py, which needs OKX credentials. It is skipped rather
+  # than failed when that is absent, because a missing credential is not a
+  # broken contract and a stranger cloning this repo has neither.
+  FORK_SKIP=""
+  if [[ -z "${VECTRA_PAYLOAD:-}" ]]; then
+    FORK_SKIP="test/fork/CallerBinding.t.sol"
+    echo "note: VECTRA_PAYLOAD unset, skipping CallerBinding (needs a live"
+    echo "      payload: python3 fetch_payload.py, requires OKX credentials)"
+  fi
+  run "fork suites (profile: fork, evm: cancun)" \
+    env FOUNDRY_PROFILE=fork FOUNDRY_NO_MATCH_PATH= VECTRA_EXPECT_CANCUN=true \
+    forge test --match-path "test/fork/*" \
+    ${FORK_SKIP:+--no-match-path "$FORK_SKIP"} --fork-url xlayer
 fi
 
 echo "=== python selection tests"
