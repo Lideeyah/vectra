@@ -166,3 +166,6 @@ ts_utc,status,distance_bps,total_usd,priced,positions,leg_direction,leg_symbol,l
 2026-09-22T17:55:17Z,priced,604.84,4.13,3,3,,,,,false,,,968.63
 2026-09-22T18:00:28Z,priced,604.62,4.13,3,3,,,,,false,,,968.63
 2026-09-22T18:05:39Z,priced,604.67,4.13,3,3,,,,,false,,,968.63
+2026-09-22T18:10:55Z,priced,604.69,4.13,3,3,,,,,false,,,968.63
+2026-09-22T18:16:06Z,priced,604.75,4.13,3,3,,,,,false,,,968.63
+2026-09-22T18:21:16Z,priced,604.5,4.13,3,3,,,,,false,,,968.63
