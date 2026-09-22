@@ -1,10 +1,10 @@
 {
-  "ts": "2026-09-22T02:43:19+00:00",
+  "ts": "2026-09-22T02:32:52+00:00",
   "mode": "execute",
   "mandateId": 1,
   "owner": "0x2f45e637920cc7c7be15130ab49224c989572ad8",
   "contract": "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0",
-  "totalUsd": 4.103592043700134,
+  "totalUsd": 4.1044620247416645,
   "usdcValueUsd": 0.533971,
   "positions": [
     {
@@ -14,12 +14,12 @@
       "balance": 5288743876947857,
       "shares": 5279761962786333,
       "multiplier": 1.001701196801074,
-      "priceUsd": 227.40667005227,
-      "valueUsd": 1.2026956338160444,
+      "priceUsd": 227.58130936989707,
+      "valueUsd": 1.203619256437819,
       "targetWeightBps": 3400,
       "targetShares": 5365020579939101,
-      "actualWeightBps": 2931,
-      "driftBps": -469
+      "actualWeightBps": 2932,
+      "driftBps": -468
     },
     {
       "symbol": "TSLAx",
@@ -28,12 +28,12 @@
       "balance": 3151172400834151,
       "shares": 3151172400834151,
       "multiplier": 1.0,
-      "priceUsd": 377.25037982356116,
-      "valueUsd": 1.1887809851042066,
+      "priceUsd": 377.2314075386562,
+      "valueUsd": 1.1887212001636331,
       "targetWeightBps": 3300,
       "targetShares": 3163548824427970,
-      "actualWeightBps": 2897,
-      "driftBps": -403
+      "actualWeightBps": 2896,
+      "driftBps": -404
     },
     {
       "symbol": "AAPLx",
@@ -42,16 +42,16 @@
       "balance": 3473767107940264,
       "shares": 3462448320960570,
       "multiplier": 1.0032690125398187,
-      "priceUsd": 339.1546952260861,
-      "valueUsd": 1.178144424779883,
+      "priceUsd": 339.15646372700695,
+      "valueUsd": 1.178150568140212,
       "targetWeightBps": 3300,
       "targetShares": 3476361388686300,
-      "actualWeightBps": 2871,
-      "driftBps": -429
+      "actualWeightBps": 2870,
+      "driftBps": -430
     }
   ],
   "leg": null,
-  "noActionReason": "largest drift 469bps is within tolerance 500bps",
+  "noActionReason": "largest drift 468bps is within tolerance 500bps",
   "payload": null,
   "payloadError": null,
   "slippagePercent": "1.0",
