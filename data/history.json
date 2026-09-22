@@ -222,6 +222,39 @@
       "txHash": "0xf309bb550986f60f8ce5e1a5247532ce4b130ec1d3a797c2708e8cb6d72f6839",
       "blockNumber": 71272212,
       "timestamp": 1790041248
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0xc845b2894dbddd03858fd2d643b4ef725fe0849d",
+      "amountIn": "104996",
+      "amountOut": "463793021090123",
+      "version": 3,
+      "txHash": "0x10a2afdc54c993792dea0e1e440856ce7b5f7798e63fbc087ebada998a9dc267",
+      "blockNumber": 71297177,
+      "timestamp": 1790066213
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+      "amountIn": "89658",
+      "amountOut": "238913876578086",
+      "version": 3,
+      "txHash": "0x21e994f42ca37314e849354ffd505149151c3620dc7dba7ddb362d62ddf7b6d4",
+      "blockNumber": 71297497,
+      "timestamp": 1790066533
+    },
+    {
+      "id": "1",
+      "tokenIn": "0xb6ceceab302e2e4948951ee7843fc24e92933061",
+      "tokenOut": "0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a",
+      "amountIn": "89669",
+      "amountOut": "264218906064353",
+      "version": 3,
+      "txHash": "0x7f541f629ddefe8fc12849f6933494758e403b91fa97631da61544b3c4b3608f",
+      "blockNumber": 71297817,
+      "timestamp": 1790066853
     }
   ],
   "amendments": [
