@@ -68,3 +68,6 @@ ts_utc,status,distance_bps,total_usd,priced,positions,leg_direction,leg_symbol,l
 2026-09-22T00:26:26Z,priced,7491.17,4.1,3,3,buy,TSLAx,0.19,7027.22,true,0x88c3292d6790821a2aad17f157bb49b3d414bd10d3541d8819f4151151d0f84f,rate bound (maxLegBpsOfTarget),21588.38
 2026-09-22T00:31:41Z,priced,7026.48,4.1,3,3,buy,TSLAx,0.19,6562.45,true,0x5554c6765507373d4c6622e144df9f4cb6caf755645a4bcee23297c3ba32f8f4,rate bound (maxLegBpsOfTarget),19988.38
 2026-09-22T00:36:57Z,priced,6562.1,4.1,3,3,buy,TSLAx,0.19,6098.09,true,0xdd4c8bfb8036aad20e9756e7e060e6de0ab4fcb2218dff6a9b7c94d14da4f9c4,rate bound (maxLegBpsOfTarget),18388.39
+2026-09-22T00:42:16Z,priced,6097.64,4.1,3,3,buy,TSLAx,0.19,5633.67,true,0xb11b0eeb198740891b903dcaf14e781c2c051a6416a0cbf0281973d94857a8d7,rate bound (maxLegBpsOfTarget),16788.39
+2026-09-22T00:47:30Z,priced,5632.71,4.1,3,3,buy,TSLAx,0.19,5168.81,true,0xc937baa328af3ecc4d16958332af3e73723d17251055a930c05eedb8e3d96537,rate bound (maxLegBpsOfTarget),15188.39
+2026-09-22T00:52:48Z,priced,5168.72,4.1,3,3,buy,TSLAx,0.19,4704.66,true,0x4a61352055f8323e4f175cf5f23cb881672c798dcc65627db1175a224e8c74a3,rate bound (maxLegBpsOfTarget),13588.39
