@@ -63,6 +63,9 @@ RATE_HEADROOM = 0.80
 # maxLegUsdc reverts if the contract's arithmetic rounds the other way, and a
 # leg that reverts costs gas and records nothing.
 LEG_HEADROOM = float(os.environ.get("VECTRA_LEG_HEADROOM", "0.95"))
+# Sit under the TARGET as well as under the limits. The contract reverts
+# Overshoot() on a leg that crosses it.
+OVERSHOOT_HEADROOM = float(os.environ.get("VECTRA_OVERSHOOT_HEADROOM", "0.90"))
 EXECUTE = os.environ.get("VECTRA_EXECUTE") == "1"
 # Build and estimate the real transaction but stop before broadcasting.
 DRY_SEND = os.environ.get("VECTRA_DRY_SEND") == "1"
@@ -311,6 +314,33 @@ def distance_bps(values, total, targets):
     return sum(abs((v / total) * 10_000 - t) for v, t in zip(values, targets))
 
 
+def gap_to_target_usd(p, direction):
+    """How much room is left before the position REACHES its target, in dollars.
+
+    The contract refuses a leg that overshoots — Overshoot() — because a
+    rebalance that sails past the target has not converged, it has swapped one
+    error for another. The agent was sizing legs in weight space while the
+    contract checks share space, so once a position came within a leg's width
+    of its target every proposal was refused and the keeper looped: on
+    2026-09-22 NVDAx sat 0.00085 shares short while the agent kept offering
+    0.00089, and every cycle reverted.
+
+    Returned with headroom, because the fill is not known exactly in advance
+    and landing a hair under the target is convergence while a hair over is a
+    revert.
+    """
+    target = p.get("targetShares")
+    held = p.get("shares")
+    if target is None or held is None or not p.get("priceUsd"):
+        return float("inf")
+    remaining = (target - held) if direction == "buy" else (held - target)
+    if remaining <= 0:
+        return 0.0
+    mult = p.get("multiplier") or 1.0
+    tokens = remaining * mult / 10 ** p["decimals"]
+    return tokens * p["priceUsd"] * OVERSHOOT_HEADROOM
+
+
 def rate_cap_usd(m, p):
     """The contract's share-denominated rate bound, converted to dollars.
 
@@ -367,6 +397,7 @@ def evaluate_legs(m, state):
                 "remaining cap": remaining_cap * LEG_HEADROOM,
                 "usdc on hand": state["usdcValueUsd"],
                 "rate bound (maxLegBpsOfTarget)": rate_usd,
+                "gap to target (shares)": gap_to_target_usd(p, "buy"),
             }
             direction, delta = "buy", +1
         else:
@@ -377,6 +408,7 @@ def evaluate_legs(m, state):
                 "maxLegUsdc": m["maxLegUsdc"] * LEG_HEADROOM,
                 "position value": p["valueUsd"] or 0,
                 "rate bound (maxLegBpsOfTarget)": rate_usd,
+                "gap to target (shares)": gap_to_target_usd(p, "sell"),
             }
             direction, delta = "sell", -1
 
