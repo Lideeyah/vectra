@@ -7,32 +7,29 @@ import { CHAIN, VECTRA_ADDRESS } from "@/lib/config";
 import { publicClient, xlayer } from "@/lib/chain";
 
 /**
- * Bring the targets inside what the cap can actually reach.
+ * Raise the targets by 8%, after the basket reached the old ones.
  *
- * At the prices recorded below, reaching the original targets cost $3.784928
- * against $3.782148 of remaining cap — over by $0.002780. A shortfall that
- * small is worse than a large one: it is inside ordinary price movement, so
- * whether it fits depends on which way the market drifts, and the failure would
- * appear as the last leg shrinking to nothing while the refusal log reported a
- * size floor rather than "the cap cannot reach these targets".
+ * The mandate converged: distance fell from 215.88% to 2.37%, inside the 5%
+ * tolerance, so the agent stopped — convergence is terminal. Raising the
+ * targets is the owner changing their mind, which is a thing this design
+ * permits and records rather than prevents: the contract emits the old and new
+ * values and increments the version, so a gap that closes because a target
+ * moved can never be passed off as one closed by trading.
  *
- * The amended targets are the originals scaled to use 88% of the remaining cap,
- * leaving room for price movement rather than another hairline.
- *
- * Done NOW, while holdings are near zero, so the amendment is a correction to
- * an unreachable plan rather than a retreat from a position — and it is
- * recorded in the target history either way, with both the old and new values.
+ * Sized to fit: $0.316294 of the $0.446685 left under the cap, which puts the
+ * basket 24.43% from target — far enough outside tolerance for the agent to
+ * have real work, close enough that the cap can actually reach it.
  */
 const NEW_TARGETS: bigint[] = [
-  5365020579939101n,   // NVDAx
-  3163548824427970n,   // TSLAx
-  3476361388686300n,   // AAPLx
+  5794222226334229n,   // NVDAx
+  3416632730382208n,   // TSLAx
+  3754470299781204n,   // AAPLx
 ];
 
 const ROWS = [
-  { sym: "NVDAx", old: 6055876421789847n, next: NEW_TARGETS[0], usd: 0.988378 },
-  { sym: "TSLAx", old: 3570920269471138n, next: NEW_TARGETS[1], usd: 1.169796 },
-  { sym: "AAPLx", old: 3924013832507040n, next: NEW_TARGETS[2], usd: 1.170116 },
+  { sym: "NVDAx", old: 5365020579939101n, next: NEW_TARGETS[0], usd: 0.116693 },
+  { sym: "TSLAx", old: 3163548824427970n, next: NEW_TARGETS[1], usd: 0.100020 },
+  { sym: "AAPLx", old: 3476361388686300n, next: NEW_TARGETS[2], usd: 0.099581 },
 ];
 
 type Eth = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
@@ -116,10 +113,7 @@ export default function Amend() {
     <div className="wrap" style={{ paddingTop: 48, paddingBottom: 80 }}>
       <h1 style={{ fontSize: 20, fontWeight: 500 }}>Amend targets to fit the cap</h1>
       <p className="dim" style={{ fontSize: 13, maxWidth: 660 }}>
-        Reaching the current targets costs <span className="mono">$3.784928</span>{" "}
-        against <span className="mono">$3.782148</span> of remaining cap — over by{" "}
-        <span className="mono">$0.002780</span>. These amended targets use 88% of
-        the remaining cap, leaving room for price movement. Signed by the owner.
+        Reaching the previous targets cost the basket to 2.37% from target, inside the 5% tolerance, so the agent stopped. These targets are 8% higher — $0.316294 of the $0.446685 left under the cap — which gives it work again. The change is recorded on chain with both values and a version increment. Signed by the owner.
       </p>
 
       <div style={{ marginTop: 18 }}>
