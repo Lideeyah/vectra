@@ -74,3 +74,6 @@ ts_utc,status,distance_bps,total_usd,priced,positions,leg_direction,leg_symbol,l
 2026-09-22T00:58:16Z,priced,4703.34,4.1,3,3,buy,AAPLx,0.19,4242.3,true,0x09d6285cd0aa97cf27de7530ac699516c997582ee9626faed2513bc7a8a1f5a6,rate bound (maxLegBpsOfTarget),11988.4
 2026-09-22T01:03:34Z,priced,4242.52,4.1,3,3,buy,AAPLx,0.19,3781.45,true,0x71931e18a10da30cc8860ffd81a5ccacd4ffc32f88f2e4cf761c782a849425be,rate bound (maxLegBpsOfTarget),10388.4
 2026-09-22T01:08:54Z,priced,3780.86,4.1,3,3,buy,AAPLx,0.19,3319.87,true,0xcc88eb85f8e5aebf4abc3c425b59c235cf85714a0dfa08f8119cf9b8ab79dc34,rate bound (maxLegBpsOfTarget),8788.42
+2026-09-22T01:14:12Z,priced,3319.85,4.1,3,3,buy,AAPLx,0.19,2858.85,true,0xac5adc055b045203bc0f1670652348cc901eecc1906c75af0c3902ae5d4d2587,rate bound (maxLegBpsOfTarget),7188.42
+2026-09-22T01:19:29Z,priced,2859.25,4.1,3,3,buy,AAPLx,0.19,2398.17,true,0x48611f2c69e60086b00ea4a9bff6a32edc7812bc960d7a684df1cfba535d166b,rate bound (maxLegBpsOfTarget),5588.43
+2026-09-22T01:24:47Z,priced,2397.14,4.1,3,3,buy,AAPLx,0.19,1936.25,true,0x5403b479f455f640b38e614d080b4bdd86731f807ead67b171ab4426dc73c785,rate bound (maxLegBpsOfTarget),3988.44
