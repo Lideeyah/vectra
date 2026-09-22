@@ -21,15 +21,15 @@ import { publicClient, xlayer } from "@/lib/chain";
  * have real work, close enough that the cap can actually reach it.
  */
 const NEW_TARGETS: bigint[] = [
-  5794222226334229n,   // NVDAx
-  3416632730382208n,   // TSLAx
-  3754470299781204n,   // AAPLx
+  5939077781992584n,   // NVDAx
+  3502048548641763n,   // TSLAx
+  3848332057275734n,   // AAPLx
 ];
 
 const ROWS = [
-  { sym: "NVDAx", old: 5365020579939101n, next: NEW_TARGETS[0], usd: 0.116693 },
-  { sym: "TSLAx", old: 3163548824427970n, next: NEW_TARGETS[1], usd: 0.100020 },
-  { sym: "AAPLx", old: 3476361388686300n, next: NEW_TARGETS[2], usd: 0.099581 },
+  { sym: "NVDAx", old: 5794222226334229n, next: NEW_TARGETS[0], usd: 0.044515 },
+  { sym: "TSLAx", old: 3416632730382208n, next: NEW_TARGETS[1], usd: 0.041988 },
+  { sym: "AAPLx", old: 3754470299781204n, next: NEW_TARGETS[2], usd: 0.041800 },
 ];
 
 type Eth = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
@@ -113,7 +113,7 @@ export default function Amend() {
     <div className="wrap" style={{ paddingTop: 48, paddingBottom: 80 }}>
       <h1 style={{ fontSize: 20, fontWeight: 500 }}>Amend targets to fit the cap</h1>
       <p className="dim" style={{ fontSize: 13, maxWidth: 660 }}>
-        Reaching the previous targets cost the basket to 2.37% from target, inside the 5% tolerance, so the agent stopped. These targets are 8% higher — $0.316294 of the $0.446685 left under the cap — which gives it work again. The change is recorded on chain with both values and a version increment. Signed by the owner.
+        Reaching the previous targets cost the basket back inside tolerance at 2.43% — it re-converged in 27 minutes, five legs, \$0.284 spent. These targets are 2.5% higher, \$0.128303 of the \$0.162362 left under the cap, putting it 9.69% from target again. Recorded on chain with both values and a version increment. Signed by the owner.
       </p>
 
       <div style={{ marginTop: 18 }}>
