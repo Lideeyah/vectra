@@ -135,3 +135,53 @@ Pause stops the agent immediately and sells nothing. Revoke is permanent.
 permissions and only one of them is the mandate. Clear the allowance separately
 — the interface shows it as its own object with the button next to it. See
 SPEC 9.4.
+
+---
+
+## The keeper as a service
+
+The keeper's pacing lives in `keeper_service.py`, not in a workflow. GitHub's
+cron is best effort, was observed firing roughly every four hours against a
+five minute schedule, and every leg on chain so far came from a manual
+`workflow_dispatch` start. A host with a restart policy is responsible for
+uptime instead.
+
+Works unchanged on Koyeb, Render, Railway or Fly. The loop runs in a thread and
+a status server binds `$PORT`: as a worker the port is unused, as a web service
+it satisfies the health check and doubles as the keep-awake target.
+
+```
+Build    pip install -r requirements.txt
+Start    python3 keeper_service.py
+```
+
+Secrets to set on the host:
+
+| | |
+|---|---|
+| `VECTRA_AGENT_KEY` | the agent key. Startup fails without it, on purpose |
+| `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`, `OKX_PROJECT_ID` | aggregator pricing |
+| `VECTRA_CONTRACT` | `0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0` |
+| `VECTRA_EXECUTE` | `1` to send. Anything else decides without sending |
+| `VECTRA_GIT_TOKEN` | fine grained PAT, contents:write. See below |
+| `VECTRA_SLIPPAGE_PERCENT` | `1.0`. The router refused every leg at 0.5 |
+| `VECTRA_RATE_BPS` | `2000` |
+
+**The git token is the part that bites.** Inside Actions the keeper pushes
+cycle logs with the automatic `GITHUB_TOKEN`. No other host has one, so without
+`VECTRA_GIT_TOKEN` the agent trades correctly and publishes nothing, which is
+silent. `GET /` reports `can_push` and the reason, so check it after the first
+deploy rather than assuming.
+
+Some build platforms hand the service a directory that is not a git checkout at
+all. That shows up in the same field.
+
+**Reading it.** `GET /` returns cycle count, seconds since the last cycle,
+last exit code, commit failures, and the agent's own published decision. A
+keep-awake pinger is itself a thing that can stop, which is the failure class
+this replaces, so the age of the last cycle is the number to watch.
+
+Restarts cost one cycle and never correctness: a cycle reads positions, targets
+and `spentUsdc` from chain every time and holds nothing between runs.
+
+`.github/workflows/keeper.yml` stays as a manual fallback.
