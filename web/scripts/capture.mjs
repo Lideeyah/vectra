@@ -455,9 +455,31 @@ async function main() {
   });
 
   // ---- 2:52 the contract, held --------------------------------------------
+  //
+  // The Contracts tab, not the default Transactions one. The closing frame has
+  // to be the source being verified ON OKX'S OWN EXPLORER, because that is the
+  // page their judge opens first and it read "Contract source code unverified"
+  // until this was submitted. Sourcify's exact_match is real and still shown at
+  // 2:32, but it is a different site and does not answer the question the
+  // explorer poses.
+  //
+  // The tab is clicked rather than deep-linked because OKLink keeps the tab in
+  // page state rather than the URL, and the assertion below is what stops this
+  // shot from quietly closing the film on an unverified contract.
   await shot("contract", async () => {
     await page.goto(`${EXPLORER}/address/${CONTRACT}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(9000);
+    const tab = page.locator("text=Contracts").first();
+    await tab.click({ timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(6000);
+    const verified = await page
+      .locator("text=Contract source code verified")
+      .first()
+      .isVisible()
+      .catch(() => false);
+    need(verified,
+         "OKLink does not show verified source (shot 2:52) — refusing to close "
+         + "the film on an unverified contract");
     await freeze(page);
     await hold(page, 8);
   });
