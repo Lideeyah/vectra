@@ -25,6 +25,17 @@ def eth_call(to, data, timeout=20):
         return json.loads(r.read())
 
 
+def rpc(method, params, timeout=20):
+    """Any read-only JSON-RPC method. eth_call keeps its own helper above
+    because every caller in the agent already uses it."""
+    payload = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
+    req = urllib.request.Request(
+        RPC, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
 def multiplier(address):
     """(scaled_float, raw_int) or (None, None) with the reason discarded by caller.
 

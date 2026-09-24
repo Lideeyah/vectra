@@ -71,6 +71,24 @@ EXECUTE = os.environ.get("VECTRA_EXECUTE") == "1"
 DRY_SEND = os.environ.get("VECTRA_DRY_SEND") == "1"
 MANDATE_ID = int(os.environ.get("VECTRA_MANDATE_ID") or 0)
 
+# TWO KEEPERS, ONE KEY.
+#
+# The Render service and the Actions workflow can both be awake, both hold the
+# same agent key, and both see the same mandate outside tolerance. Nothing in
+# this process can see the other one: a lock in Python is a lock in ONE process,
+# and GitHub's `concurrency:` group knows nothing about a container on Render.
+#
+# The chain is the only thing both can read, so the chain is the coordinator.
+# Before sending, the agent asks how long ago THIS mandate last executed a leg,
+# and defers if that is inside its gap. No lease, no database, no third service.
+#
+# Roles are asymmetric on purpose. The primary acts promptly; the fallback waits
+# long enough that a living primary always beats it to the leg. Set
+# VECTRA_ROLE=fallback on the host that is meant to be the understudy.
+ROLE = (os.environ.get("VECTRA_ROLE") or "primary").strip().lower()
+LEG_GAP_MIN = float(os.environ.get("VECTRA_MIN_LEG_GAP_MIN")
+                    or (12 if ROLE == "fallback" else 4))
+
 SEL_BALANCE_OF = "0x70a08231"
 SEL_ALLOWANCE = "0xdd62ed3e"
 
@@ -729,6 +747,80 @@ MINOUT_HAIRCUT_BPS = int(os.environ.get("VECTRA_MINOUT_HAIRCUT_BPS", "50"))
 EXECUTE_ATTEMPTS = int(os.environ.get("VECTRA_EXECUTE_ATTEMPTS", "4"))
 
 
+def seconds_since_last_leg(mandate_id):
+    """Seconds since this mandate last emitted Executed, read from chain.
+
+    Returns (age_seconds_or_None, scanned_ok). age None means no leg inside the
+    window, which is the common case and is NOT an error.
+
+    X Layer produces a block a second and REFUSES an eth_getLogs range wider
+    than 100 blocks, so a single call sees only 100 seconds. The window is
+    walked in chunks rather than asked for at once, because the wide query is
+    refused rather than truncated and a swallowed refusal looks exactly like a
+    chain with no legs on it.
+
+    scanned_ok is returned separately so the caller can decide what an
+    unanswered question means. It is not the same as "no leg found".
+    """
+    import xlayer as chain
+    from eth_utils import keccak
+
+    window_s = int(LEG_GAP_MIN * 60)
+    topic0 = "0x" + keccak(
+        text="Executed(uint256,address,address,uint256,uint256,uint64)").hex()
+    topic1 = "0x" + f"{int(mandate_id):064x}"
+
+    try:
+        head = int(chain.rpc("eth_blockNumber", [])["result"], 16)
+        # One second a block, so the window is about one block per second. A
+        # margin is added because block time is an average, not a guarantee.
+        lo = max(0, head - int(window_s * 1.5))
+        newest = None
+        b = head
+        while b >= lo:
+            a = max(lo, b - 94)
+            r = chain.rpc("eth_getLogs", [{
+                "address": CONTRACT, "fromBlock": hex(a), "toBlock": hex(b),
+                "topics": [topic0, topic1]}])
+            if "error" in r:
+                return None, False
+            for lg in r.get("result", []):
+                n = int(lg["blockNumber"], 16)
+                if newest is None or n > newest:
+                    newest = n
+            if newest is not None:
+                break          # walking backwards: the first hit is the newest
+            b = a - 1
+        if newest is None:
+            return None, True
+        ts = int(chain.rpc("eth_getBlockByNumber",
+                           [hex(newest), False])["result"]["timestamp"], 16)
+        return max(0, int(time.time()) - ts), True
+    except Exception:
+        return None, False
+
+
+def defer_to_other_keeper(mandate_id):
+    """Whether to stand down this cycle. Returns a reason, or None to proceed.
+
+    The fallback FAILS CLOSED and the primary FAILS OPEN when the chain cannot
+    be read. An understudy that acts while blind is the thing this guard exists
+    to prevent; a primary that stops whenever an RPC hiccups is a keeper that
+    stops, which is worse than the race it was avoiding.
+    """
+    age, ok = seconds_since_last_leg(mandate_id)
+    if not ok:
+        if ROLE == "fallback":
+            return ("could not read recent legs from chain and this host is the "
+                    "fallback, so it defers rather than acting blind")
+        return None
+    if age is not None and age < LEG_GAP_MIN * 60:
+        return (f"a leg for this mandate executed {age}s ago, inside this "
+                f"host's {LEG_GAP_MIN:g} minute gap (role={ROLE}); another "
+                f"keeper is servicing it")
+    return None
+
+
 def do_execute(m, leg, payload, payload_err):
     """Send the leg, or explain precisely why it was not sent.
 
@@ -950,7 +1042,17 @@ def run_cycle(mandate_id=None):
 
     execution = None
     if EXECUTE:
-        execution = do_execute(m, leg, payload, payload_err)
+        # Asked of the CHAIN, not of a local file: the published cycle log is
+        # committed every few cycles and is stale by minutes, which would make
+        # this either useless or permanently over-cautious.
+        standdown = defer_to_other_keeper(mid) if mid else None
+        if standdown:
+            print(f"\nSTAND DOWN: {standdown}")
+            leg = None
+            execution = {"sent": False, "reason": standdown,
+                         "deferred": True, "role": ROLE}
+        else:
+            execution = do_execute(m, leg, payload, payload_err)
 
     mid = m.get("mandateId")
     # Mandate 1 keeps the historical paths so the files already committed and

@@ -60,6 +60,13 @@ jobs:
           # service is a keeper that services exactly one, and the next owner
           # to create one gets a page that never changes and no explanation.
           VECTRA_RATE_BPS: "2000"
+          # THE FALLBACK, not the primary. The Render service holds the loop
+          # and is always on; this workflow exists for when that host is down.
+          # Both hold the same agent key and neither can see the other, so the
+          # understudy is the one that waits: it stands down if this mandate
+          # legged inside twelve minutes, and stands down as well if it cannot
+          # read the chain to find out. See ROLE in agent.py.
+          VECTRA_ROLE: "fallback"
           # The router rejected every leg at 0.5%: "Min return not reached".
           # What the owner can lose is bounded by the cap and the rate limit,
           # not by this.
