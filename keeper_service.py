@@ -42,6 +42,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -49,6 +50,13 @@ ROOT = pathlib.Path(__file__).parent
 CYCLE_MIN = float(os.environ.get("VECTRA_CYCLE_MIN", "5"))
 COMMIT_EVERY = int(os.environ.get("VECTRA_COMMIT_EVERY", "3"))
 PORT = int(os.environ.get("PORT", "8000"))
+
+# Render's free tier stops a web service after about 15 minutes with no
+# inbound request, and a stopped service is a stopped keeper. RENDER_EXTERNAL_URL
+# is set by the platform, so the service can keep itself awake without a second
+# account to maintain.
+SELF_URL = os.environ.get("VECTRA_SELF_URL") or os.environ.get("RENDER_EXTERNAL_URL", "")
+PING_MIN = float(os.environ.get("VECTRA_PING_MIN", "10"))
 
 STARTED = time.time()
 STATE = {
@@ -59,6 +67,7 @@ STATE = {
     "commits_attempted": 0,
     "commits_failed": 0,
     "can_push": None,
+    "self_ping": None,
 }
 LOCK = threading.Lock()
 
@@ -147,6 +156,39 @@ def loop() -> None:
         time.sleep(sleep)
 
 
+def keep_awake() -> None:
+    """Hit our own public URL so the platform sees inbound traffic.
+
+    A request to the external URL goes out and back through the platform's
+    router, which is what the idle timer actually watches; a loopback request
+    to 127.0.0.1 would not count.
+
+    This keeps a running service running. It CANNOT wake one that has already
+    stopped, because a stopped service cannot make requests. An external
+    monitor is still the thing that recovers from a stop, and it is worth
+    having one pointed at / for that reason alone.
+    """
+    if not SELF_URL:
+        log("no RENDER_EXTERNAL_URL or VECTRA_SELF_URL; self-ping disabled")
+        with LOCK:
+            STATE["self_ping"] = "disabled: no url"
+        return
+
+    log(f"self-ping every {PING_MIN} min to {SELF_URL}")
+    while True:
+        time.sleep(PING_MIN * 60)
+        try:
+            with urllib.request.urlopen(SELF_URL, timeout=30) as r:
+                ok = f"{r.status} at {now()}"
+        except Exception as e:
+            # Never fatal. A failed ping means the idle timer keeps counting,
+            # which is a problem to see rather than to crash over.
+            ok = f"failed at {now()}: {type(e).__name__}"
+            log(f"self-ping {ok}")
+        with LOCK:
+            STATE["self_ping"] = ok
+
+
 def status() -> dict:
     with LOCK:
         s = dict(STATE)
@@ -198,5 +240,6 @@ if __name__ == "__main__":
         sys.exit("VECTRA_AGENT_KEY is not set")
 
     threading.Thread(target=loop, daemon=True).start()
+    threading.Thread(target=keep_awake, daemon=True).start()
     log(f"status on :{PORT}")
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
