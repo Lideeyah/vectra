@@ -175,8 +175,14 @@ def keep_awake() -> None:
         return
 
     log(f"self-ping every {PING_MIN} min to {SELF_URL}")
+    # The FIRST ping happens a minute after boot, not one interval later.
+    # Sleeping the full interval first leaves the newest, most fragile part of
+    # a service's life completely unprotected, and leaves the status field
+    # empty for ten minutes so it reads as broken while it is merely waiting.
+    delay = 60.0
     while True:
-        time.sleep(PING_MIN * 60)
+        time.sleep(delay)
+        delay = PING_MIN * 60
         try:
             with urllib.request.urlopen(SELF_URL, timeout=30) as r:
                 ok = f"{r.status} at {now()}"
