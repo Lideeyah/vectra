@@ -1,0 +1,39 @@
+# Render blueprint for the keeper.
+#
+# A WEB service, not a worker, because Render's free tier has no background
+# workers. keeper_service.py already binds $PORT for exactly this reason: the
+# loop runs in a thread and the status route satisfies the health check.
+#
+# Free instances spin down after about 15 minutes without a request, so the
+# keep-awake ping is load bearing. Point it at / and it doubles as the
+# heartbeat: the response carries seconds_since_last_cycle.
+services:
+  - type: web
+    name: vectra-keeper
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 keeper_service.py
+    healthCheckPath: /
+    envVars:
+      - key: VECTRA_CONTRACT
+        value: "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0"
+      - key: VECTRA_EXECUTE
+        value: "1"
+      - key: VECTRA_SLIPPAGE_PERCENT
+        value: "1.0"
+      - key: VECTRA_RATE_BPS
+        value: "2000"
+      # Set in the dashboard, never here.
+      - key: VECTRA_AGENT_KEY
+        sync: false
+      - key: VECTRA_GIT_TOKEN
+        sync: false
+      - key: OKX_API_KEY
+        sync: false
+      - key: OKX_SECRET_KEY
+        sync: false
+      - key: OKX_PASSPHRASE
+        sync: false
+      - key: OKX_PROJECT_ID
+        sync: false
