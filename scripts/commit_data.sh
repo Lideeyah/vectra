@@ -58,9 +58,26 @@ git config user.email "lydiasolomon137@gmail.com"
 # the repository config and never echoed. `git remote set-url` would persist it
 # in .git/config where a later `git remote -v` would print it.
 if [ -n "${VECTRA_GIT_TOKEN:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ]; then
-  ORIGIN="$(git remote get-url origin)"
-  SLUG="${ORIGIN#*github.com[:/]}"
-  SLUG="${SLUG%.git}"
+  # The slug is NOT derived from `git remote get-url origin` alone. Render's
+  # checkout has no usable origin, so that returned nothing, the slug came out
+  # empty, and the push URL silently became https://github.com/.git/ — a valid
+  # looking string pointing at no repository. Four attempts failed against it
+  # every cycle, and the pull failed the same way, which the script then
+  # reported as a rebase conflict. An empty variable interpolated into a URL
+  # produces a wrong answer rather than an error, so it is checked.
+  SLUG="${VECTRA_REPO_SLUG:-${GITHUB_REPOSITORY:-}}"
+  if [ -z "$SLUG" ]; then
+    ORIGIN="$(git remote get-url origin 2>/dev/null || true)"
+    case "$ORIGIN" in
+      *github.com[:/]*) SLUG="${ORIGIN#*github.com[:/]}"; SLUG="${SLUG%.git}" ;;
+      *)                SLUG="" ;;
+    esac
+  fi
+  if [ -z "$SLUG" ]; then
+    echo "cannot determine the repository to push to." >&2
+    echo "Set VECTRA_REPO_SLUG (for example: Lideeyah/vectra)." >&2
+    exit 1
+  fi
   PUSH_URL="https://x-access-token:${VECTRA_GIT_TOKEN}@github.com/${SLUG}.git"
   echo "  pushing with VECTRA_GIT_TOKEN to ${SLUG}"
 else
