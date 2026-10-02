@@ -83,6 +83,20 @@ if [[ "${1:-}" == "--fork" ]]; then
     ${FORK_SKIP:+--no-match-path "$FORK_SKIP"} --fork-url xlayer
 fi
 
+# A use-before-assignment killed the live keeper for eight days: `mid` was read
+# in the EXECUTE branch and assigned below it, so Python made it a local and the
+# read raised UnboundLocalError. It fired ONLY where EXECUTE was on, so every
+# dry run looked healthy while the only running keeper died every cycle.
+#
+# pyflakes reports it as "undefined name" at the exact line. Cheap, and it
+# catches the whole class rather than this one instance.
+echo "=== static checks"
+if python3 -c "import pyflakes" 2>/dev/null; then
+  run "pyflakes" python3 -m pyflakes agent.py send.py xlayer.py okx_dex.py     record.py keeper_service.py discover.py
+else
+  echo "SKIP: pyflakes not installed (pip install pyflakes)"
+fi
+
 echo "=== python selection tests"
 run "agent selection" python3 test_agent_selection.py
 run "distance series " python3 test_distance_series.py

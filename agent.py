@@ -1040,6 +1040,12 @@ def run_cycle(mandate_id=None):
     for r in state["refusals"]:
         print(f"  refused [{r['token']}]: {r['reason']}")
 
+    # Read BEFORE the execute block, which needs it. It used to be assigned
+    # below, which made it a local that the stand-down check read before it
+    # existed: UnboundLocalError on every cycle, but only where EXECUTE is on,
+    # so a dry run looked perfectly healthy while the live keeper died.
+    mid = m.get("mandateId")
+
     execution = None
     if EXECUTE:
         # Asked of the CHAIN, not of a local file: the published cycle log is
@@ -1054,7 +1060,6 @@ def run_cycle(mandate_id=None):
         else:
             execution = do_execute(m, leg, payload, payload_err)
 
-    mid = m.get("mandateId")
     # Mandate 1 keeps the historical paths so the files already committed and
     # already fetched by the interface do not move; every other mandate gets
     # its own directory.
