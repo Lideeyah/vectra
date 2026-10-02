@@ -21,6 +21,15 @@ MSG="${1:?commit message required}"
 shift
 PATHS=("${@:-data}")
 BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+# A detached HEAD reports the literal string "HEAD", not a branch name, and a
+# push to HEAD:HEAD is not a valid destination ref. Render checks out a commit
+# rather than a branch, so every cycle the keeper computed its work, committed
+# it, failed all four push attempts and threw it away. Eight days of the series
+# were lost to those four characters.
+if [ "$BRANCH" = "HEAD" ] || [ -z "$BRANCH" ]; then
+  BRANCH="${VECTRA_BRANCH:-main}"
+  echo "  detached HEAD; pushing to ${BRANCH}"
+fi
 ATTEMPTS=4
 
 # A tree left mid-rebase by an earlier step fails everything below, so it is
