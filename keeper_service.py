@@ -68,6 +68,8 @@ STATE = {
     "commits_failed": 0,
     "can_push": None,
     "self_ping": None,
+    "last_commit_output": None,
+    "last_commit_rc": None,
 }
 LOCK = threading.Lock()
 
@@ -115,8 +117,18 @@ def commit() -> bool:
         return False
     r = subprocess.run(
         ["bash", "scripts/commit_data.sh", f"record: {now()}", "data"],
-        cwd=ROOT,
+        cwd=ROOT, capture_output=True, text=True,
     )
+    # Kept and surfaced, because commits_failed alone was useless: the script
+    # exits 0 both when it pushes and when there is nothing to commit, so the
+    # counter could not tell a working keeper from a silent one. Reading this
+    # needed the host's log, which meant the only person who could diagnose it
+    # was whoever was sitting in front of the dashboard.
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    print(out, flush=True)
+    with LOCK:
+        STATE["last_commit_output"] = out[-600:]
+        STATE["last_commit_rc"] = r.returncode
     return r.returncode == 0
 
 
