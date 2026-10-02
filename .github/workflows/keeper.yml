@@ -6,9 +6,15 @@ name: keeper
 # recorder observed it firing roughly every four hours against a five minute
 # schedule — so each job stays alive and paces its own cycles. The schedule
 # here is a RESTART trigger, nothing more.
+# No schedule. The Render service holds the loop and is the primary; this
+# workflow is the manual fallback for when that host is down. Leaving the cron
+# on meant 170 minute runs overlapping a keeper that was already running, and
+# while the stand-down guard stops them double-trading, both still committed to
+# data/ and fought over the same branch.
+#
+# Start it by hand from the Actions tab if Render is unavailable. VECTRA_ROLE is
+# set to fallback below, so it defers to a live primary either way.
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       execute:
