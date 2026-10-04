@@ -1,10 +1,10 @@
 {
-  "ts": "2026-10-04T06:03:24+00:00",
+  "ts": "2026-10-04T05:53:24+00:00",
   "mode": "execute",
   "mandateId": 1,
   "owner": "0x2f45e637920cc7c7be15130ab49224c989572ad8",
   "contract": "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0",
-  "totalUsd": 4.1094778187765595,
+  "totalUsd": 4.109490240226715,
   "usdcValueUsd": 0.249648,
   "positions": [
     {
@@ -14,8 +14,8 @@
       "balance": 5752536898037979,
       "shares": 5742767320642790,
       "multiplier": 1.001701196801074,
-      "priceUsd": 234.7364176426711,
-      "valueUsd": 1.3503299038027188,
+      "priceUsd": 234.73857694218984,
+      "valueUsd": 1.3503423252528741,
       "targetWeightBps": 3400,
       "targetShares": 5939077781992584,
       "actualWeightBps": 3286,
