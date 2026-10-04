@@ -1,10 +1,10 @@
 {
-  "ts": "2026-10-04T15:48:24+00:00",
+  "ts": "2026-10-04T15:38:24+00:00",
   "mode": "execute",
   "mandateId": 1,
   "owner": "0x2f45e637920cc7c7be15130ab49224c989572ad8",
   "contract": "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0",
-  "totalUsd": 4.1128735107755,
+  "totalUsd": 4.113103270390664,
   "usdcValueUsd": 0.249648,
   "positions": [
     {
@@ -14,12 +14,12 @@
       "balance": 5752536898037979,
       "shares": 5742767320642790,
       "multiplier": 1.001701196801074,
-      "priceUsd": 235.03784442796206,
-      "valueUsd": 1.3520638725071619,
+      "priceUsd": 235.06745785432452,
+      "valueUsd": 1.3522342248349892,
       "targetWeightBps": 3400,
       "targetShares": 5939077781992584,
-      "actualWeightBps": 3287,
-      "driftBps": -113
+      "actualWeightBps": 3288,
+      "driftBps": -112
     },
     {
       "symbol": "TSLAx",
@@ -28,8 +28,8 @@
       "balance": 3390086277412237,
       "shares": 3390086277412237,
       "multiplier": 1.0,
-      "priceUsd": 372.6305587870332,
-      "valueUsd": 1.263249743888375,
+      "priceUsd": 372.6305526883674,
+      "valueUsd": 1.263249723213372,
       "targetWeightBps": 3300,
       "targetShares": 3502048548641763,
       "actualWeightBps": 3071,
@@ -42,8 +42,8 @@
       "balance": 3737986014004616,
       "shares": 3725806306467838,
       "multiplier": 1.0032690125398187,
-      "priceUsd": 333.84605766436175,
-      "valueUsd": 1.2479118943799627,
+      "priceUsd": 333.8619560551311,
+      "valueUsd": 1.2479713223423037,
       "targetWeightBps": 3300,
       "targetShares": 3848332057275734,
       "actualWeightBps": 3034,
