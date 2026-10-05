@@ -1,10 +1,10 @@
 {
-  "ts": "2026-10-05T04:18:24+00:00",
+  "ts": "2026-10-05T04:08:23+00:00",
   "mode": "execute",
   "mandateId": 1,
   "owner": "0x2f45e637920cc7c7be15130ab49224c989572ad8",
   "contract": "0x08Ed8562e2fD44C82EBA0CDfbC6F5Fdca3Cf19a0",
-  "totalUsd": 4.114175634405226,
+  "totalUsd": 4.114572901826225,
   "usdcValueUsd": 0.249648,
   "positions": [
     {
@@ -14,8 +14,8 @@
       "balance": 5752536898037979,
       "shares": 5742767320642790,
       "multiplier": 1.001701196801074,
-      "priceUsd": 235.5702103291277,
-      "valueUsd": 1.3551263269968745,
+      "priceUsd": 235.63893370335919,
+      "valueUsd": 1.3555216607428988,
       "targetWeightBps": 3400,
       "targetShares": 5939077781992584,
       "actualWeightBps": 3294,
@@ -28,12 +28,12 @@
       "balance": 3390086277412237,
       "shares": 3390086277412237,
       "multiplier": 1.0,
-      "priceUsd": 372.4070578237661,
-      "valueUsd": 1.2624920563398148,
+      "priceUsd": 372.4067598824921,
+      "valueUsd": 1.2624910462931904,
       "targetWeightBps": 3300,
       "targetShares": 3502048548641763,
-      "actualWeightBps": 3069,
-      "driftBps": -231
+      "actualWeightBps": 3068,
+      "driftBps": -232
     },
     {
       "symbol": "AAPLx",
@@ -42,12 +42,12 @@
       "balance": 3737986014004616,
       "shares": 3725806306467838,
       "multiplier": 1.0032690125398187,
-      "priceUsd": 333.57782677540996,
-      "valueUsd": 1.246909251068537,
+      "priceUsd": 333.5786142908228,
+      "valueUsd": 1.246912194790136,
       "targetWeightBps": 3300,
       "targetShares": 3848332057275734,
-      "actualWeightBps": 3031,
-      "driftBps": -269
+      "actualWeightBps": 3030,
+      "driftBps": -270
     }
   ],
   "leg": null,
